@@ -15,16 +15,17 @@ is load-bearing; if you read only one thing on this page, read
 |---|---|---|---|
 | **AgentConnect** | Task/artifact/decision/review/handoff ledger, routing, model tiering, worker runtime, workspaces and scoped tokens, audit. Both cross-product contracts. | Durable workflows to Temporal, issues to Linear, protocol to the official MCP SDK, inference to whatever implements `LocalComputeProvider` | Implemented |
 | **BrainConnect** | Trust, provenance, scope, promotion and supersession of claims. The human gate. | Search sophistication to a pluggable retrieval backend; secret and injection detection to third-party engines | Implemented |
-| **ComputeConnect** | *Charter:* compute-provider registry, runtime and model lifecycle delegation, placement policy, health, execution metadata | Inference itself — it never loads a tensor | Design phase, no runtime |
-| **ToolConnect** | *Charter:* protocol-neutral tool registry, asserted governance metadata, policy decisions, health, authorization records, audit | Tool description and transport to MCP; in-path proxying to existing gateways | Design phase, no runtime |
+| **ComputeConnect** | *Charter:* compute-provider registry, runtime and model lifecycle delegation, placement policy, health, execution metadata | Inference itself — it never loads a tensor | Design phase, no code |
+| **ToolConnect** | *Charter:* protocol-neutral tool registry, asserted governance metadata, policy decisions, health, authorization records, audit | Tool description and transport to MCP; in-path proxying to existing gateways | Validation phase, prototype, no runtime |
 
 The division is deliberate. **AgentConnect controls access; BrainConnect controls trust.**
 Neither is allowed to do the other's job. A task reaching `complete` in AgentConnect never
 promotes a claim in BrainConnect, and no BrainConnect status ever authorises an agent to act.
 
-The same discipline governs the design-phase products. **ComputeConnect decides where work
+The same discipline governs the pre-runtime products. **ComputeConnect decides where work
 runs, not how it is computed.** **ToolConnect decides whether a call is permitted, and does
-not carry the call.**
+not carry the call** — and where a memory layer may degrade to permissive when unavailable,
+ToolConnect's authorization fails closed.
 
 ### The contracts
 
@@ -71,9 +72,10 @@ makes the record defensible.
 **Boundary:** AgentConnect is a compliance and control layer, *not* a security sandbox. It
 records what a cooperative agent did. It does not contain a hostile one.
 
-**Open issue:** the HTTP API (`agentconnect-api`) currently has an authorization and
-completion bypass. The CLI path drawn above is unaffected. Do not expose the HTTP API to
-managed agents until it is fixed. See [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps).
+**Resolved issue:** the HTTP API (`agentconnect-api`) once had an authorization and completion
+bypass — an agent handed the API address could mark its own task complete, skipping the audit.
+Fixed at commit `a07df7f`, which routes every transport through a single authorization gate and
+removes `force` from the completion schema. See [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps).
 
 ### BrainConnect alone
 
@@ -181,7 +183,7 @@ flowchart TD
     ac -.->|"LocalComputeProvider<br/>contract ships; no implementation"| cc["ComputeConnect<br/>DESIGN PHASE"]
     cc -.->|"delegates execution"| engines["inference engines<br/>(third-party)"]
 
-    harness -.->|"asks: may I call this?"| tc["ToolConnect<br/>DESIGN PHASE"]
+    harness -.->|"asks: may I call this?"| tc["ToolConnect<br/>VALIDATION PHASE"]
     harness -.->|"then calls the tool directly"| tools["MCP tools"]
 
     style cc stroke-dasharray: 5 5
@@ -194,11 +196,12 @@ What can honestly be said about each dashed edge:
   an HTTP server on the BrainConnect side. This is the nearest thing to real.
 - **AgentConnect → ComputeConnect.** `LocalComputeProvider` and `HttpLocalComputeProvider`
   ship in `agentconnect-core` today. ComputeConnect's charter is to be the engine-side manager
-  conforming to that contract. No implementation exists, and its architecture proposal has not
-  yet been pushed to its repository.
+  conforming to that contract. No implementation exists; its architecture proposal is published
+  (`19e1406`) but the repository is documentation only.
 - **Harness → ToolConnect.** Note the shape: the decision arrow and the call arrow are
   *separate*. ToolConnect answers whether a call is permitted; the caller then invokes the
   tool itself. ToolConnect is never in the data path. Drawing it inline would misrepresent the
-  architecture, which explicitly rejects the proxy role.
+  architecture, which explicitly rejects the proxy role. Its validation prototype confirms the
+  shape but implements no runtime.
 
 The dashed arrows become solid only when something runs.

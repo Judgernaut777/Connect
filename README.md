@@ -11,18 +11,22 @@ Every product works independently. None requires another to be useful.
 
 ## Status at a glance
 
-Two products are implemented and runnable. Two are in the architecture and design phase:
-their charters are defined and written down, but **neither has a runtime implementation.**
+Two products are implemented and runnable. The other two are pre-runtime: their charters are
+defined and written down, but **neither has a runtime implementation.** ComputeConnect is at
+the architecture stage with no code; ToolConnect has an in-memory validation prototype that is
+deliberately not the product.
 
 | Product | Status | What it is | Repository |
 |---|---|---|---|
 | **AgentConnect** | Implemented | Task, artifact, decision, review, routing, and handoff backplane for coding agents | [AgentConnect](https://github.com/Judgernaut777/AgentConnect) |
 | **BrainConnect** | Implemented | Human-gated trusted memory ledger | [BrainConnect](https://github.com/Judgernaut777/BrainConnect) |
-| **ComputeConnect** | Design phase | Compute-resource control plane. No runtime. | [ComputeConnect](https://github.com/Judgernaut777/ComputeConnect) |
-| **ToolConnect** | Design phase | Tool-governance platform. No runtime. | [ToolConnect](https://github.com/Judgernaut777/ToolConnect) |
+| **ComputeConnect** | Design phase | Compute-resource control plane. No code. | [ComputeConnect](https://github.com/Judgernaut777/ComputeConnect) |
+| **ToolConnect** | Validation phase | Tool-governance platform. Validation prototype, no runtime. | [ToolConnect](https://github.com/Judgernaut777/ToolConnect) |
 
-Neither design-phase product is installable, and nothing in this repository should be read
-as implying otherwise. Neither is production-ready.
+Neither pre-runtime product is installable, and nothing in this repository should be read
+as implying otherwise. Neither is production-ready. ToolConnect has an in-memory validation
+prototype that is deliberately *not* the product — it has no server, no daemon, and no tool
+execution.
 
 > **Naming in transition.** BrainConnect's repository has been renamed, but its identifiers
 > have not. The console scripts are still `wiki` and `wiki-librarian`, the MCP server is
@@ -61,9 +65,9 @@ not own the engine behind it.
 **Boundary.** AgentConnect is a compliance and control layer, **not a security sandbox.** It
 records what a cooperative agent did. It does not contain a hostile one.
 
-> **Open security issue.** An authorization and completion bypass in AgentConnect's HTTP API
-> is open at the time of writing. **Do not enable the HTTP API for managed-agent access**
-> until the fix lands. See [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps).
+An authorization and completion bypass in the HTTP API — a managed agent could mark its own
+task complete without the audit running — was **fixed** at commit `a07df7f`; every transport
+now routes through one authorization gate. See [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps).
 
 ### BrainConnect
 
@@ -110,21 +114,25 @@ implements it does not.
 execution belongs to maintained engines and runtimes; ComputeConnect decides *where* work
 runs, not *how* it is computed.
 
-**Publication note.** Its architecture proposal has not yet been pushed. The repository
-currently contains only a stub README.
+Its architecture proposal is published (commit `19e1406`); the repository is architecture and
+interfaces only, with no code.
 
 ### ToolConnect
 
 A tool-governance platform. It is the authority on which tools exist, what they do, who may
 call them, whether they are healthy, and what happened when they were called.
 
-**Architecture and design phase. There is no runtime implementation.** The architecture
-proposal is published, at commit `c6c4480`.
+**Validation phase. There is no runtime implementation.** There is an in-memory validation
+prototype — roughly 600 lines under `src/toolconnect/`, with a 52-test suite that passes
+offline — built to test assumptions, not to be the product. It has no server, no database,
+no HTTP service, and no tool execution; a test asserts that no `invoke()` exists.
 
 **Works independently.** By design. Unproven, because nothing runs yet.
 
 **Charter.** A protocol-neutral tool registry; asserted governance metadata; policy
-decisions; health; authorization records; and audit.
+decisions; health; authorization records; and audit. Capability metadata is treated as an
+untrusted registry assertion, never a server's self-claim. Tool authorization **fails
+closed** — unlike a memory layer, it may not degrade to permissive when unavailable.
 
 **ToolConnect is a policy and decision point, not a tool-execution proxy.** It does not sit
 in the data path. Calls do not flow through it. In the vocabulary of XACML it is the policy
@@ -133,6 +141,10 @@ distinction that keeps governance from collapsing into proxying.
 
 **What it delegates.** Tool description and transport to the Model Context Protocol, and the
 in-path proxy role to existing gateways that already do it well.
+
+**Honest caveat.** ToolConnect's "protocol-neutral" claim is **unproven** — every tool the
+prototype has ingested so far was MCP-shaped. Whether it should be built at all remains an
+open go/no-go question its own roadmap will decide.
 
 ---
 
@@ -145,7 +157,7 @@ in-path proxy role to existing gateways that already do it well.
 | Route work across model tiers, keeping sensitive context out of the wrong models | **AgentConnect** |
 | Browse and audit what your agents have learned, as a wiki you own | **BrainConnect** |
 | Have agents contribute findings that a human promotes before anything trusts them | **AgentConnect + BrainConnect** |
-| Manage local compute, or govern which agent may call which tool | Nothing runnable yet. Both are design-phase. |
+| Manage local compute, or govern which agent may call which tool | Nothing runnable yet — ComputeConnect is design-phase, ToolConnect a validation prototype. |
 
 **Start with one.** Both implemented products are standalone-first and useful alone. Reach
 for the combined install only when you specifically want agent work recorded by AgentConnect

@@ -18,8 +18,8 @@ once releases exist.
 |---|---|---|---|---|
 | AgentConnect | Implemented | `v0.1.0-mvp-control-loop` | span `0.1.0`–`0.2.0` across nine packages | Versions are not unified across packages |
 | BrainConnect | Implemented | `v0.1.0` | `0.2.0` (`cli`) | Repository renamed; identifiers still say `wiki`/`wikibrain` |
-| ComputeConnect | Design | — | — | No runtime. Proposal not yet pushed. |
-| ToolConnect | Design | — | — | No runtime. Proposal published at `c6c4480`. |
+| ComputeConnect | Design | — | — | No code. Architecture proposal published at `19e1406`. |
+| ToolConnect | Validation | — | prototype only | No runtime. In-memory prototype (~600 lines), 52-test offline gate, at `70c2da3`. |
 
 Because AgentConnect's packages do not share a version number, "AgentConnect 0.2.0" does not
 currently name a thing. Do not write it down as though it does.
@@ -46,7 +46,7 @@ describes**. A pairing verified by an in-process test does not earn a row that i
 network path. See [Known gaps](#known-gaps).
 
 ComputeConnect and ToolConnect enter this matrix when they have runnable releases. A charter
-is not a version.
+is not a version, and neither is a validation prototype.
 
 ---
 
@@ -113,23 +113,25 @@ Two consequences worth knowing before you vendor either implemented product:
 Standing list of places where the ecosystem does not do what a reasonable reader would assume.
 Each is either verified against the code or explicitly attributed to the reporting product.
 
-### 0. AgentConnect HTTP API authorization and completion bypass 🔴 open
+### 0. AgentConnect HTTP API authorization and completion bypass ✅ fixed at `a07df7f`
 
-**An authorization and completion bypass in AgentConnect's HTTP API is open at the time of
-writing.**
+`POST /tasks/{id}/complete` with `force: true` was reachable by anyone who could open a
+socket — the HTTP adapter had no authentication, and a managed agent was handed the address
+in `AGENTCONNECT_API_HOST`/`_PORT`. It could mark its own task succeeded, attributed to any
+name, without the audit running. The completion gate — the property that a managed agent
+session cannot certify its own work — is the mechanism the product exists to provide, and the
+HTTP path did not enforce it.
 
-**Do not enable the HTTP API (`agentconnect-api`) for managed-agent access until the fix
-lands.** The completion gate — the property that a managed agent session cannot mark its own
-task complete — is the mechanism the product exists to provide, and the HTTP path does not
-currently enforce it.
+**Fixed at commit `a07df7f`.** Every transport now routes through a single `authorize()` gate
+(the HTTP adapter via a per-route dependency, the MCP server via a per-tool decorator);
+`force` is removed from the completion schema and the override is a separate operator-only
+endpoint that writes its reason to the ledger; completion is attributed to the authenticated
+principal. A regression test (`tests/test_http_authorization.py`) stands up a real uvicorn
+server on a real port and replays the full bypass.
 
-The CLI-driven managed loop described in [GETTING_STARTED.md](GETTING_STARTED.md) and
-[COMBINED_INSTALL.md](COMBINED_INSTALL.md) does not require the HTTP API, and neither combined
-topology uses it.
-
-*Reported by the AgentConnect maintainers. Recorded here as an operational warning; it has not
-been independently reproduced from this repository.* This entry is removed, and replaced with
-the fixing commit, once AgentConnect reports it fixed.
+*Verified against the AgentConnect repository: the fix commit and its test exist. The
+underlying security claim was reported by the AgentConnect maintainers and has not been
+independently re-exploited from this repository.*
 
 ### 1. BrainConnect has no HTTP server — the memory integration cannot be wired
 
@@ -174,12 +176,15 @@ number to record in a matrix row.
 **Impact:** a matrix keyed on "AgentConnect version" cannot be built until the packages are
 versioned together or the matrix is keyed per-package.
 
-### 5. ComputeConnect's architecture proposal is unpublished
+### 5. ToolConnect's differentiating claim is unproven
 
-The charter is defined, but the repository contains only a stub README. Readers following the
-link from this documentation will not find the design it describes.
+ToolConnect's Phase 1 validation left one assumption open: "protocol-neutral" is unproven,
+because every tool its prototype has ingested so far was MCP-shaped. Its own roadmap makes
+ingesting an OpenAPI document the test that either confirms the claim or collapses it, and
+treats "should this be built at all" as still undecided.
 
-**Impact:** documentation-only. Nothing depends on it, because nothing runs.
+**Impact:** none on the implemented products. Recorded so this document does not present a
+validation prototype as a settled product direction.
 
 ---
 
@@ -198,5 +203,5 @@ currently follows it.
 4. **Contract changes are major.** `MemoryAdapter` and `LocalComputeProvider` are the
    ecosystem's public surface. Breaking either is a major bump in the product that owns the
    interface — which is AgentConnect for both.
-5. **A design-phase product has no version.** ComputeConnect and ToolConnect acquire versions
-   when they have code, not when they have a charter.
+5. **A pre-runtime product has no version.** ComputeConnect and ToolConnect acquire versions
+   when they have a runnable release, not when they have a charter or a validation prototype.

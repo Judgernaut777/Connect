@@ -5,11 +5,12 @@ Running more than one Connect product together.
 | | Products |
 |---|---|
 | **Available** | AgentConnect, BrainConnect |
-| **Design-stage, not installable** | ComputeConnect, ToolConnect |
+| **Pre-runtime, not installable** | ComputeConnect (design phase), ToolConnect (validation prototype) |
 
-A combined install is therefore a **two-product** install. Instructions for a four-product
-ecosystem will be written when ComputeConnect and ToolConnect have runnable releases, and not
-one moment earlier.
+A combined install is therefore a **two-product** install. ToolConnect having a validation
+prototype does not change this — the prototype is deliberately not the product, and there is
+nothing to deploy. Instructions for a four-product ecosystem will be written when
+ComputeConnect and ToolConnect have runnable releases, and not one moment earlier.
 
 Read this before you start: **the two products compose in two different ways, and only one of
 them works today.** Choosing the wrong one costs you an afternoon discovering that a
@@ -98,9 +99,9 @@ agentconnect --help
 deactivate
 ```
 
-> **Do not enable the HTTP API** (`agentconnect-api`) for managed-agent access. An
-> authorization and completion bypass is open at the time of writing. See
-> [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps). Topology A does not need it.
+> Topology A does not use AgentConnect's HTTP API at all. An earlier authorization and
+> completion bypass in that API was fixed at commit `a07df7f`; see
+> [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps) for the record.
 
 ### BrainConnect
 

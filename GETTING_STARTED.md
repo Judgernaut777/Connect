@@ -42,11 +42,9 @@ agentconnect shell --task "$TASK" -- <agent-command>
 ```
 
 A managed agent session cannot mark its own task complete. That is deliberate, and it is the
-point of the product.
-
-> **Do not enable the HTTP API for managed-agent access.** An authorization and completion
-> bypass in AgentConnect's HTTP API is open at the time of writing. The CLI loop above is
-> unaffected. See [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps).
+point of the product. An HTTP-API bypass that once let an agent do exactly that was fixed at
+commit `a07df7f`; the HTTP adapter now authenticates and the token decides. See
+[COMPATIBILITY.md](COMPATIBILITY.md#known-gaps).
 
 **Read next:** `docs/OPERATOR_GUIDE.md` in the AgentConnect repository. It walks the whole
 loop with exact commands, and its failure-modes section lists what actually goes wrong.
@@ -108,7 +106,7 @@ your live `~/.wiki-brain/wiki.db`.
 
 ## ComputeConnect only
 
-**Not installable. There is no runtime implementation.**
+**Not installable. There is no code.**
 
 ComputeConnect is in the architecture and design phase. Its charter is a heterogeneous
 compute-provider registry, runtime and model lifecycle delegation, placement policy, health,
@@ -116,8 +114,9 @@ and execution metadata, conforming to AgentConnect's `LocalComputeProvider` cont
 
 There is nothing to install and no timeline to report. The contract it will implement already
 ships inside `agentconnect.core.local_compute`; the implementation does not exist. Its
-architecture proposal has not yet been pushed to
-[its repository](https://github.com/Judgernaut777/ComputeConnect).
+architecture proposal is published (commit `19e1406`) in
+[its repository](https://github.com/Judgernaut777/ComputeConnect), which is documentation
+only.
 
 ---
 
@@ -125,15 +124,21 @@ architecture proposal has not yet been pushed to
 
 **Not installable. There is no runtime implementation.**
 
-ToolConnect is in the architecture and design phase, with its proposal published at commit
-`c6c4480`. Its charter is a protocol-neutral tool registry, asserted governance metadata,
-policy decisions, health, authorization records, and audit.
+ToolConnect is in its validation phase. There is an in-memory prototype — roughly 600 lines
+with a 52-test suite that passes offline — built to test assumptions, **not to be the
+product.** It has no server, no database, no HTTP service, and no tool execution. You can run
+its test suite from a clone, but there is nothing to deploy.
 
-It is a **policy and decision point, not a tool-execution proxy** — it does not sit in the
-data path, and tool calls do not flow through it. Read
-[its repository](https://github.com/Judgernaut777/ToolConnect) before proposing work; its
-`docs/STATUS.md` is explicit that every interface in the architecture document is an
-illustrative signature, not a committed API.
+Its charter is a protocol-neutral tool registry, asserted governance metadata, policy
+decisions, health, authorization records, and audit. It is a **policy and decision point, not
+a tool-execution proxy** — it does not sit in the data path, and tool calls do not flow
+through it. Its tool authorization **fails closed**: unlike a memory layer, it may not degrade
+to permissive when unavailable.
+
+Read [its repository](https://github.com/Judgernaut777/ToolConnect) before proposing work; its
+`docs/STATUS.md` is explicit about what the prototype does and does not settle — including that
+the "protocol-neutral" claim is still unproven, because every tool ingested so far was
+MCP-shaped.
 
 ---
 
