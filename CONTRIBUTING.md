@@ -60,16 +60,20 @@ does not verify a network path. Say which one you have.
 sentence that says so.
 
 **Prose is bounded by what a product has published.** A product with no charter gets no
-description at all. A product with a written charter but no runtime — ComputeConnect and
-ToolConnect today — gets exactly its charter, labelled *design phase*, with no timeline, no
-implied capability, and no undashed arrow in any diagram. A product with code gets described
-by its code. Never let a design document be quoted as though it were behaviour.
+description at all. A product with a written charter but no runtime — ComputeConnect today —
+gets exactly its charter, labelled *design phase*, with no timeline, no implied capability,
+and no undashed arrow in any diagram. A validation prototype that its own authors call "not
+the product" — ToolConnect today — earns a mention of what the prototype proved and a
+*validation phase* label, but still no runtime prose: it has no server and no tool execution,
+and the docs must say so. A product with a runnable release gets described by that release.
+Never let a design document or a throwaway prototype be quoted as though it were the shipped
+product.
 
 The failure mode this rule exists to prevent is subtle: a charter is written to be
 persuasive, and prose lifted from it will read as a description of something that works.
 Say what phase it is in, in the same breath.
 
-## Proposing a scope for a design-phase product
+## Proposing a scope for a pre-runtime product
 
 Open an issue on this repository. A scope proposal should answer:
 

@@ -10,7 +10,7 @@ front door.
 
 - Extended design notes that span more than one product
 - Deep-dives referenced from [ARCHITECTURE.md](../ARCHITECTURE.md)
-- Scope proposals for the design-phase products, once accepted
+- Scope proposals for the pre-runtime products, once accepted
 - A roadmap, if the ecosystem ever wants a single sequenced one
 
 ## What does not
@@ -30,9 +30,9 @@ No product keeps its internals documented here. Follow the source.
 | The memory ledger design contract, and the trust rule every consumer must obey | `docs/LEDGER_SPEC.md` in [BrainConnect](https://github.com/Judgernaut777/BrainConnect) |
 | Schema migrations and the live-database hazard | `docs/MIGRATIONS.md` in BrainConnect |
 | Memory safety, and why trusted is not the same as safe to expose | `docs/SAFETY.md` in BrainConnect |
-| The tool-governance charter, and why it is a decision point rather than a proxy | `docs/ARCHITECTURE.md` and `docs/STATUS.md` in [ToolConnect](https://github.com/Judgernaut777/ToolConnect) |
-| The compute control-plane charter | [ComputeConnect](https://github.com/Judgernaut777/ComputeConnect) — proposal not yet pushed |
+| The tool-governance charter, its Phase 1 validation results, and why it is a decision point rather than a proxy | `docs/ARCHITECTURE.md`, `docs/STATUS.md`, `docs/PHASE1_VALIDATION.md` in [ToolConnect](https://github.com/Judgernaut777/ToolConnect) |
+| The compute control-plane charter | `docs/ARCHITECTURE.md` and `docs/STATUS.md` in [ComputeConnect](https://github.com/Judgernaut777/ComputeConnect) |
 
-Read a design-phase product's `docs/STATUS.md` before trusting any interface it describes.
+Read a pre-runtime product's `docs/STATUS.md` before trusting any interface it describes.
 ToolConnect's is explicit that every signature in its architecture document is illustrative,
-not a committed API.
+not a committed API, and that its validation prototype is not the product.
