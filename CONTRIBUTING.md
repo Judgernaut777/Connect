@@ -55,27 +55,31 @@ documents:
 **Describe a test suite by what it exercises.** An in-process test verifies semantics. It
 does not verify a network path. Say which one you have.
 
-**Name missing features where a reader would look for them**, not in a footnote. If
-`wiki serve` does not exist, the sentence about reaching BrainConnect over HTTP is the
-sentence that says so.
+**Name missing features where a reader would look for them**, not in a footnote. If there is
+no shipped AgentConnect client for ToolConnect, the sentence describing that integration is the
+sentence that says the binding is API-level only — not a later caveat the reader reaches after
+they have already wired it.
 
-**Prose is bounded by what a product has published.** A product with no charter gets no
-description at all. A product with a written charter but no runtime — ComputeConnect today —
-gets exactly its charter, labelled *design phase*, with no timeline, no implied capability,
-and no undashed arrow in any diagram. A validation prototype that its own authors call "not
-the product" — ToolConnect today — earns a mention of what the prototype proved and a
-*validation phase* label, but still no runtime prose: it has no server and no tool execution,
-and the docs must say so. A product with a runnable release gets described by that release.
-Never let a design document or a throwaway prototype be quoted as though it were the shipped
-product.
+**Prose is bounded by what a product has published, and by its maturity.** All four products
+now have a runtime and a `0.1.0` release, but "has a runtime" is not "is production-ready."
+Describe each by its actual maturity and name its limitations in the same breath:
 
-The failure mode this rule exists to prevent is subtle: a charter is written to be
-persuasive, and prose lifted from it will read as a description of something that works.
-Say what phase it is in, in the same breath.
+- **Release candidate** (AgentConnect, BrainConnect today): describe the working feature, and
+  still name the known gaps where a reader would look.
+- **MVP** (ComputeConnect, ToolConnect today): describe what runs, then state what makes it an
+  MVP. ComputeConnect's heterogeneity is unproven because its second provider is simulated;
+  ToolConnect has no tool execution by design and its protocol-neutral claim is only partially
+  proven. Neither of those sentences may be dropped to make the product sound finished.
 
-## Proposing a scope for a pre-runtime product
+Never let a design document, a charter, or a green in-process test be quoted as though it were a
+verified, shipped capability. The failure mode this rule exists to prevent is subtle: a charter
+is written to be persuasive, and prose lifted from it reads as a description of something that
+works. Say what maturity it is at, and what it does *not* yet do, in the same breath.
 
-Open an issue on this repository. A scope proposal should answer:
+## Proposing a new product
+
+The four current products all have runtimes; a fifth would start here. Open an issue on this
+repository. A scope proposal should answer:
 
 1. What does it do that no existing product does?
 2. Can it stand alone? (See [MANIFESTO.md](MANIFESTO.md#1-standalone-first) — if it cannot,

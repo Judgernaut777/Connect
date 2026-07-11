@@ -1,91 +1,21 @@
 # Combined installation
 
-Running more than one Connect product together.
+Running more than one Connect product together. All four products are installable at `0.1.0`.
 
-| | Products |
-|---|---|
-| **Available** | AgentConnect, BrainConnect |
-| **Pre-runtime, not installable** | ComputeConnect (design phase), ToolConnect (validation prototype) |
+Read [COMPATIBILITY.md](COMPATIBILITY.md) alongside this — especially the Python floor (3.11 for
+a single-venv install), the port registry, and the one real caveat below.
 
-A combined install is therefore a **two-product** install. ToolConnect having a validation
-prototype does not change this — the prototype is deliberately not the product, and there is
-nothing to deploy. Instructions for a four-product ecosystem will be written when
-ComputeConnect and ToolConnect have runnable releases, and not one moment earlier.
-
-Read this before you start: **the two products compose in two different ways, and only one of
-them works today.** Choosing the wrong one costs you an afternoon discovering that a
-documented default points at a server nobody wrote.
+> **The one caveat that will bite you: `brainconnect` is taken on PyPI.** An unrelated package
+> owns that name. Install BrainConnect **by wheel path or from a checkout**, never by bare name.
+> Every recipe below does this. Ignore it and `pip install brainconnect` will silently fetch a
+> stranger's neuroscience library.
 
 ---
 
-## The two topologies
+## Standalone installs (each product alone)
 
-### Topology A — both as MCP servers behind one harness ✅ works today
-
-Your agent harness (Claude Code, Codex, Cursor, opencode, …) connects to *both* MCP servers
-independently. The agent gets AgentConnect's tools and BrainConnect's `brain_*` tools side by
-side. The products never talk to each other; the harness is the only thing that touches both.
-
-```mermaid
-flowchart TD
-    harness["your MCP harness"]
-    harness -->|MCP / stdio| ac["AgentConnect<br/>control plane"]
-    harness -->|MCP / stdio| bc["BrainConnect<br/>memory ledger"]
-    ac --> acdb[("agentconnect.db")]
-    bc --> bcdb[("wiki.db")]
-    you(["you"]) -->|"promote / reject"| bcdb
-```
-
-This requires no HTTP, no shared port, and no integration code. It is the recommended
-combined install.
-
-**Trade-off:** the coupling lives in the harness's head. Nothing forces an agent to record a
-finding in BrainConnect just because it completed a task in AgentConnect. You get two good
-tools, not one system.
-
-### Topology B — AgentConnect calls BrainConnect through its memory adapter ⛔ blocked
-
-AgentConnect's core registers a BrainConnect memory adapter in
-`agentconnect/core/bootstrap.py`:
-
-```python
-"wikibrain": (WikiBrainMemoryAdapter, "WIKIBRAIN_URL", "http://localhost:8787")
-```
-
-Point `WIKIBRAIN_URL` at a BrainConnect REST service and the control plane can capture and
-recall memory on its own. That is the intended architecture.
-
-**It does not work, because BrainConnect has no HTTP server.** There is no `wiki serve`.
-Nothing listens on `:8787`. The repository contains no `uvicorn`, `FastAPI`, or `flask`
-import anywhere. `wiki serve` is a tracked, deferred follow-up.
-
-The cross-repo integration test stands in for the missing server with an in-process transport
-into `wiki.api`. That test drives a real ledger, real promotion, and the real trust filter —
-so the semantics are genuinely verified. But there is no wire plumbing.
-
-> **A green integration suite means the semantics agree, not that the network path exists.**
-
-Do not configure `WIKIBRAIN_URL` and expect memory to work. It will fail at the socket.
-
----
-
-## Installing both (Topology A)
-
-### Prerequisites
-
-**Python 3.11 or newer.** AgentConnect requires ≥ 3.10 and BrainConnect requires ≥ 3.11, so
-the effective floor for a combined install is the higher of the two. See
-[COMPATIBILITY.md](COMPATIBILITY.md#python-version-floor).
-
-### Use separate virtual environments
-
-Install each product into its own venv. They are separate repositories with separate
-dependency sets, separate licenses, and separate Python floors. Sharing a venv buys you
-nothing and risks resolving one product's constraints against the other's.
-
-It also protects BrainConnect's central guarantee. The `wiki` command makes zero model calls;
-the model-bearing `wiki-librarian` is a deliberately separate process. Mixing an inference
-stack into the same environment blurs a line the product works hard to draw.
+Every product runs standalone. These are the copy-pasteable per-product installs; see
+[GETTING_STARTED.md](GETTING_STARTED.md) for what to do after each one.
 
 ### AgentConnect
 
@@ -94,14 +24,12 @@ git clone https://github.com/Judgernaut777/AgentConnect
 cd AgentConnect
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e packages/agentconnect-core -e packages/agentconnect-cli
-export AGENTCONNECT_DB_PATH=/srv/agentconnect/agentconnect.db
+export AGENTCONNECT_DB_PATH="$PWD/agentconnect.db"
 agentconnect --help
-deactivate
 ```
 
-> Topology A does not use AgentConnect's HTTP API at all. An earlier authorization and
-> completion bypass in that API was fixed at commit `a07df7f`; see
-> [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps) for the record.
+The other packages — `agentconnect-router`, `-runtime`, `-model-manager`, `-api`, `-mcp`,
+`-linear`, `-temporal` — are separate installs you add only when you need them.
 
 ### BrainConnect
 
@@ -110,58 +38,148 @@ git clone https://github.com/Judgernaut777/BrainConnect
 cd BrainConnect
 cp config.example.toml config.toml
 python3 -m venv .venv
-.venv/bin/python -m pip install -e ./cli
-.venv/bin/wiki init
+.venv/bin/python -m pip install -e .        # installs `brainconnect` + `brainconnect-librarian`
+.venv/bin/brainconnect init                  # create the DB and scaffold dirs
 ```
 
-### Register both with your harness
+### ComputeConnect
 
-Each product exposes an MCP server. Register them as two separate entries, using absolute
-paths into each venv so the harness does not depend on which environment is active.
+```bash
+git clone https://github.com/Judgernaut777/ComputeConnect
+cd ComputeConnect
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/computeconnect serve --port 8090   # six LocalComputeProvider routes + OpenAI layer
+```
 
-- **AgentConnect:** the `agentconnect-router` console script (from
-  `packages/agentconnect-router`), or `agentconnect-mcp` (from `packages/agentconnect-mcp`).
-  Both are separate installs from the CLI above.
-- **BrainConnect:** `wiki mcp serve`.
+### ToolConnect
 
-> **Serve BrainConnect without `--review`.** The `--review` flag exposes `brain_pending`,
-> `brain_promote`, and `brain_reject` — the human gate. Handing those to an agent defeats the
-> entire trust model. Promote from your own terminal.
+```bash
+git clone https://github.com/Judgernaut777/ToolConnect
+cd ToolConnect
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/toolconnect init-db --db ./toolconnect.db
+.venv/bin/toolconnect serve --db ./toolconnect.db --policies examples/policies.cedar  # 127.0.0.1:8095
+```
+
+`serve` refuses to start without a parseable policy file; an empty policy set denies everything.
 
 ---
 
-## Environment variables
+## Two-product recipes
 
-| Variable | Product | Purpose |
-|---|---|---|
-| `AGENTCONNECT_DB_PATH` | AgentConnect | Path to the operator ledger database |
-| `WIKIBRAIN_URL` | AgentConnect | Base URL of the BrainConnect REST service. **Leave unset** — no such service exists (Topology B). |
-| `WIKIBRAIN_DB` | BrainConnect | Override the ledger database path. Set this in tests and scripts. |
+Each pair below is a seam that was exercised over the real transport during the Phase-5
+integration run. Use **separate virtual environments** per product (the manifesto's modularity
+principle, and it keeps BrainConnect's zero-model guarantee clean).
 
-### The `WIKIBRAIN_DB` hazard
+### AgentConnect + BrainConnect (human-gated memory over HTTP)
 
-`Repo.open()` runs forward schema migrations on **every** open, including the one the MCP
-server performs at launch. The database lives at an absolute path from `config.toml`, so
-passing a temporary repo root does **not** isolate it. Any test, script, or verification run
-that opens a repo will migrate your live `~/.wiki-brain/wiki.db` unless you set
-`WIKIBRAIN_DB=/tmp/scratch.db` first.
+BrainConnect now ships an HTTP server, so the memory adapter has something real to talk to.
 
-### Ports
+```bash
+# In the BrainConnect venv — serve the ledger with a bearer token:
+.venv/bin/brainconnect serve --port 8787 --token "$BC_TOKEN"
 
-`WIKIBRAIN_URL` defaults to `http://localhost:8787`, and AgentConnect's own compliance
-documentation uses `:8787` as the example value for `AGENTCONNECT_API_URL`. Two products must
-not share a port. See the [port registry](COMPATIBILITY.md#provisional-port-registry) before
-either becomes load-bearing.
+# In the AgentConnect environment — point the memory adapter at it:
+export AGENTCONNECT_MEMORY_BACKEND=brainconnect
+export BRAINCONNECT_URL="http://localhost:8787"
+export BRAINCONNECT_TOKEN="$BC_TOKEN"
+```
+
+The trust gradient is one-way by design: workers may **capture** (write-only), only a manager may
+**recall**, and re-injection flows through AgentConnect's classify-and-redact pass. Promotion is
+**human-only** — a captured claim lands `pending` and becomes trusted memory only when you promote
+it from your own terminal.
+
+> **Never serve BrainConnect's MCP `--review` mode to an agent.** That mode exposes
+> `brain_pending` / `brain_promote` / `brain_reject` — the human gate. Promote from a terminal you
+> control, not from an agent's tool list.
+
+Alternatively, run both as **MCP servers behind one harness** (no HTTP): register AgentConnect's
+`agentconnect-router` (or `agentconnect-mcp`) and BrainConnect's `brainconnect mcp serve` as two
+stdio entries. The harness is then the only component touching both; nothing couples them, and the
+agent must call `brain_capture` itself.
+
+### AgentConnect + ComputeConnect (private local generation)
+
+```bash
+# In the ComputeConnect venv:
+.venv/bin/computeconnect serve --port 8090
+
+# In the AgentConnect environment — its shipped HttpLocalComputeProvider targets it:
+export COMPUTECONNECT_URL="http://localhost:8090"
+```
+
+`/generate` defaults to the most restrictive privacy tier when none is supplied (CA-1), and cloud
+placement requires positive re-verification; a `run_id` is echoed as `X-Run-Id` and is cancellable
+via `POST /runs/{run_id}/cancel` (CA-3). **Note:** registering ComputeConnect as an AgentConnect
+routing worker is currently programmatic — there is no env/YAML declaration surface for it yet.
+
+### AgentConnect + ToolConnect (fail-closed tool governance)
+
+```bash
+# In the ToolConnect venv:
+.venv/bin/toolconnect init-db --db ./toolconnect.db
+.venv/bin/toolconnect serve --db ./toolconnect.db --policies examples/policies.cedar
+```
+
+The caller asks `POST /authorize` before invoking a tool, performs the call itself, and closes the
+loop with `POST /decisions/{id}/outcome`. **This binding is API-level only:** AgentConnect ships no
+ToolConnect client, so today you wire the two through ToolConnect's HTTP API directly.
+
+---
+
+## The full four-product install
+
+The packaging validation on 2026-07-12 built wheels for all four products from pristine
+`git archive` copies and installed **all twelve wheels plus dependencies — 86 packages — into a
+single Python 3.11+ virtual environment with zero dependency conflicts** and eleven coexisting
+console scripts. Separate venvs are still the recommended default; a single combined venv is a
+verified, supported option when you want one environment.
+
+The only non-obvious step is BrainConnect, which must come from its wheel (PyPI name collision):
+
+```bash
+# 1. Build a wheel for each product from its checkout:
+python3 -m venv .buildenv && source .buildenv/bin/activate && pip install build
+
+for repo in AgentConnect BrainConnect ComputeConnect ToolConnect; do
+  ( cd "$repo" && python -m build --wheel --outdir ../wheelhouse )
+done
+# AgentConnect is nine wheels; the other three are one each — twelve in total.
+deactivate
+
+# 2. Install everything into one fresh venv, resolving BrainConnect ONLY from the wheelhouse:
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install --find-links ./wheelhouse ./wheelhouse/brainconnect-0.1.0-py3-none-any.whl \
+            ./wheelhouse/agentconnect_*-0.1.0-py3-none-any.whl \
+            ./wheelhouse/computeconnect-0.1.0-py3-none-any.whl \
+            ./wheelhouse/toolconnect-0.1.0-py3-none-any.whl
+```
+
+Passing the explicit `brainconnect-0.1.0-...whl` path guarantees the local wheel wins over the
+PyPI name. If you would rather forbid PyPI entirely, add `--no-index` and rely solely on
+`--find-links ./wheelhouse` (you then also need the dependency wheels available locally).
+
+Verify the eleven console scripts coexist:
+
+```bash
+agentconnect --help && brainconnect --help && computeconnect --help && toolconnect --help
+```
 
 ---
 
 ## What "combined" does not buy you
 
-- **No automatic capture.** AgentConnect will not write agent findings into BrainConnect for
-  you. Under Topology A the agent must call `brain_capture` itself.
-- **No shared trust model.** AgentConnect's task states and BrainConnect's `trusted` flag are
-  unrelated. A completed task is not a promoted claim, and never becomes one without a human.
-- **No shared database.** Two SQLite files, two lifecycles, two backup jobs.
+- **No automatic memory capture.** AgentConnect does not write findings into BrainConnect for you;
+  under the harness topology the agent must call `brain_capture` itself, and promotion is always a
+  human act.
+- **No shared trust model.** A completed AgentConnect task is not a promoted BrainConnect claim,
+  and never becomes one without a human.
+- **No shared database.** Each product keeps its own store, lifecycle, and backup job.
+- **No first-class ToolConnect client in AgentConnect**, and **no declaration surface** for
+  registering ComputeConnect as a routing worker — both are wired programmatically or at the API.
 
-If you want one system rather than two tools, Topology B is the design that delivers it — and
-it is waiting on `wiki serve`.
+If you want one system rather than a set of composable tools, the seams are real and tested — but
+the coupling is deliberately thin, and the human gate is deliberately non-negotiable.

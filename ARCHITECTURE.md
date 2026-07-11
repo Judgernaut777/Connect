@@ -2,47 +2,45 @@
 
 How the Connect products interact. Diagrams are rendered with Mermaid.
 
-Throughout, **solid arrows are paths that exist in code today.** Dashed arrows are contracts
-that are defined but not implemented, or designs that have not been built. That distinction
-is load-bearing; if you read only one thing on this page, read
-[the ecosystem diagram's caveat](#complete-ecosystem-deployment).
+Throughout, **solid arrows are paths exercised in code over a real transport this cycle.**
+Dashed arrows are bindings that exist but were exercised only at an API surface, or that are
+wired programmatically without a declaration surface. That distinction is load-bearing.
 
 ---
 
 ## The pieces
 
-| Product | Owns | Delegates | Status |
+| Product | Owns | Delegates | Maturity |
 |---|---|---|---|
-| **AgentConnect** | Task/artifact/decision/review/handoff ledger, routing, model tiering, worker runtime, workspaces and scoped tokens, audit. Both cross-product contracts. | Durable workflows to Temporal, issues to Linear, protocol to the official MCP SDK, inference to whatever implements `LocalComputeProvider` | Implemented |
-| **BrainConnect** | Trust, provenance, scope, promotion and supersession of claims. The human gate. | Search sophistication to a pluggable retrieval backend; secret and injection detection to third-party engines | Implemented |
-| **ComputeConnect** | *Charter:* compute-provider registry, runtime and model lifecycle delegation, placement policy, health, execution metadata | Inference itself — it never loads a tensor | Design phase, no code |
-| **ToolConnect** | *Charter:* protocol-neutral tool registry, asserted governance metadata, policy decisions, health, authorization records, audit | Tool description and transport to MCP; in-path proxying to existing gateways | Validation phase, prototype, no runtime |
+| **AgentConnect** | Task/artifact/decision/review/handoff ledger, routing, model tiering, worker runtime, workspaces and scoped tokens, audit. Both cross-product contracts. | Durable workflows to Temporal, issues to Linear, protocol to the official MCP SDK, inference to whatever implements `LocalComputeProvider` | Release candidate |
+| **BrainConnect** | Trust, provenance, scope, promotion and supersession of claims. The human gate. | Search sophistication to a pluggable retrieval backend; secret and injection detection to third-party engines | Release candidate |
+| **ComputeConnect** | Compute-provider registry, placement policy, health, execution metadata, structural privacy filtering | Inference itself — it never loads a tensor; engine lifecycle stays with the engine | MVP (heterogeneity unproven) |
+| **ToolConnect** | Protocol-neutral tool registry, asserted governance metadata, policy decisions, health, authorization records, audit | Tool description and transport to MCP; in-path proxying to existing gateways | MVP service |
 
 The division is deliberate. **AgentConnect controls access; BrainConnect controls trust.**
 Neither is allowed to do the other's job. A task reaching `complete` in AgentConnect never
 promotes a claim in BrainConnect, and no BrainConnect status ever authorises an agent to act.
 
-The same discipline governs the pre-runtime products. **ComputeConnect decides where work
-runs, not how it is computed.** **ToolConnect decides whether a call is permitted, and does
-not carry the call** — and where a memory layer may degrade to permissive when unavailable,
-ToolConnect's authorization fails closed.
+The same discipline governs the newer products. **ComputeConnect decides where work runs, not
+how it is computed.** **ToolConnect decides whether a call is permitted, and does not carry the
+call** — and where a memory layer may degrade to permissive when unavailable, ToolConnect's
+authorization fails closed.
 
 ### The contracts
 
-Cross-product surface is expressed as an interface in `agentconnect-core`, never as shared
-code:
+Cross-product surface is expressed as an interface in `agentconnect-core`, never as shared code:
 
-- **`MemoryAdapter`** — how the control plane reaches a memory layer. `WikiBrainMemoryAdapter`
-  is one implementation, registered in `agentconnect.core.bootstrap` against the
-  `WIKIBRAIN_URL` environment variable with a default of `http://localhost:8787`.
+- **`MemoryAdapter`** — how the control plane reaches a memory layer. It is registered in
+  `agentconnect.core.bootstrap` under the service name `brainconnect` (env `BRAINCONNECT_URL`,
+  token `BRAINCONNECT_TOKEN`, default `http://localhost:8787`), with `wikibrain` kept as a legacy
+  alias to the same adapter. `origin_actor_type="system"` is mapped to the ledger's `"tool"`.
 - **`LocalComputeProvider`** — an abstract base in `agentconnect.core.local_compute`, with
-  `HttpLocalComputeProvider` as the shipped implementation. AgentConnect declares what local
-  inference must look like and does not own the engine behind it. ComputeConnect's charter is
-  to be the engine-side manager conforming to this contract.
+  `HttpLocalComputeProvider` as the shipped client. ComputeConnect is the engine-side manager that
+  conforms to it, carrying amendments CA-1 (privacy default-deny) and CA-3 (`run_id` identity).
 
-There is no contract for tool governance. ToolConnect's architecture defines its own
-interfaces, and its `docs/STATUS.md` is explicit that they are illustrative signatures rather
-than committed APIs.
+There is **no shared interface for tool governance.** ToolConnect defines its own HTTP surface,
+documented in its `docs/SERVICE.md` and pinned by `docs/AGENTCONNECT_CONTRACT.md`. AgentConnect
+does not yet ship a client for it.
 
 There is no shared package and no monorepo. Separate repositories, explicit interfaces.
 
@@ -50,10 +48,9 @@ There is no shared package and no monorepo. Separate repositories, explicit inte
 
 ## Standalone deployments
 
-Every product is designed standalone-first. The two implemented ones are complete on their
-own today.
+Every product is designed standalone-first and runs alone today.
 
-### AgentConnect alone
+### AgentConnect alone ✅
 
 ```mermaid
 flowchart TD
@@ -61,147 +58,172 @@ flowchart TD
     cli --> svc["RouterService<br/>(control plane)"]
     harness["coding agent<br/>(Codex, Claude Code)"] -->|"managed shell"| svc
     svc --> db[("agentconnect.db<br/>operator ledger")]
-    svc -.->|"optional packages"| opt["router · runtime<br/>model-manager · api<br/>linear · temporal"]
+    svc -->|"optional packages"| opt["router · runtime<br/>model-manager · api<br/>linear · temporal"]
     you -->|"review + complete"| svc
 ```
 
-The agent works inside its own harness, but durable work must enter the ledger. A managed
-agent session **cannot complete its own task** — the operator closes the loop. This is what
-makes the record defensible.
+The agent works inside its own harness, but durable work must enter the ledger. A managed agent
+session **cannot complete its own task** — the operator closes the loop. Verified this cycle
+driving a real `claude -p` through task → launch → shell → artifact → review → audit → complete,
+including the refusal of a self-complete inside the managed session.
 
-**Boundary:** AgentConnect is a compliance and control layer, *not* a security sandbox. It
-records what a cooperative agent did. It does not contain a hostile one.
+**Boundary:** AgentConnect is a compliance and control layer, *not* a security sandbox. The HTTP
+API's historical authorization/completion bypass was fixed at `a07df7f` and **stays fixed** under
+an independent retest. See [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps).
 
-**Resolved issue:** the HTTP API (`agentconnect-api`) once had an authorization and completion
-bypass — an agent handed the API address could mark its own task complete, skipping the audit.
-Fixed at commit `a07df7f`, which routes every transport through a single authorization gate and
-removes `force` from the completion schema. See [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps).
-
-### BrainConnect alone
+### BrainConnect alone ✅
 
 ```mermaid
 flowchart LR
     agents["your agents"] -->|"brain_capture (MCP)"| db[("SQLite<br/>trusted memory")]
     db -->|"brain_recall (MCP)"| agents
-    lib["wiki-librarian<br/>(the only model-bearing part)"] -->|"drafts candidates"| db
+    lib["brainconnect-librarian<br/>(the only model-bearing part)"] -->|"drafts candidates"| db
     db -->|"generated view"| vault["Obsidian vault<br/>you browse + audit"]
     you(["you"]) -->|"promote / reject"| db
+    http["brainconnect serve<br/>:8787 (optional token)"] --> db
 ```
 
-Everything captured — by an agent or by you — lands `pending`. It becomes trusted memory only
-when a human promotes it. The `wiki` command itself makes zero model calls; only the separate
-`wiki-librarian` process uses a model, and only to draft.
+Everything captured lands `pending`; it becomes trusted memory only when a human promotes it. The
+`brainconnect` command makes zero model calls; only the separate `brainconnect-librarian` uses a
+model, and only to draft. **Retrieval can never widen trust** — the backend nominates rows by id;
+the ledger answers for status, scope, and confidence.
 
-**Retrieval can never widen trust.** The search backend nominates rows by id; the ledger
-answers for status, scope, and confidence. Swap a vector store in underneath and the trust
-boundary does not move.
+### ComputeConnect alone ✅ (MVP)
+
+```mermaid
+flowchart TD
+    client["LocalComputeProvider client<br/>(e.g. AgentConnect)"] -->|"6 routes + /v1"| cc["computeconnect serve<br/>:8090"]
+    cc -->|"placement + privacy filter"| pool["provider registry"]
+    pool -->|"real, read-only"| llama["llama.cpp engine<br/>:8080"]
+    pool -.->|"SIMULATED"| sim["cloud provider<br/>(in-process)"]
+```
+
+The runtime is real: six `LocalComputeProvider` routes, an OpenAI-compatible layer, streaming with
+mid-stream cancel, and structural default-deny privacy filtering. **The heterogeneity premise is
+unproven** — the only real provider on this host is the local llama.cpp engine; the second is
+simulated (drawn dashed for exactly that reason).
+
+### ToolConnect alone ✅ (MVP service)
+
+```mermaid
+flowchart TD
+    caller["the caller<br/>(agent / harness)"] -->|"POST /authorize"| tc["toolconnect serve<br/>:8095"]
+    tc --> store[("SQLite<br/>catalog + audit")]
+    caller -.->|"then calls the tool directly"| tool["MCP tool"]
+    caller -->|"POST /decisions/{id}/outcome"| tc
+    src["MCP server"] -->|"stdio discovery"| tc
+    you(["operator"]) -->|"assert descriptor"| tc
+```
+
+Note the shape: the **decision arrow and the call arrow are separate.** ToolConnect answers whether
+a call is permitted; the caller invokes the tool itself. There is no `invoke()` anywhere — a test
+asserts its absence. Authorization **fails closed**; `serve` refuses to start without a parseable
+policy.
 
 ---
 
 ## Two-product integration
 
-### Topology A — harness-mediated ✅ exists today
-
-```mermaid
-flowchart TD
-    harness["MCP harness"]
-    harness -->|MCP| ac["AgentConnect"]
-    harness -->|MCP| bc["BrainConnect"]
-    ac --> acdb[("agentconnect.db")]
-    bc --> bcdb[("wiki.db")]
-    you(["you"]) -->|promote| bcdb
-    you -->|"complete task"| ac
-```
-
-Two independent MCP servers; the harness is the only component touching both. No HTTP, no
-shared port, no integration code. The agent is *able* to record a finding in memory and *able*
-to record work in the ledger, but nothing couples the two.
-
-### Topology B — adapter-mediated ⛔ contract defined, server missing
+### AgentConnect + BrainConnect over HTTP ✅ works today
 
 ```mermaid
 flowchart LR
-    ac["AgentConnect<br/>RouterService"] --> ma["MemoryAdapter<br/>(interface)"]
-    ma --> wba["WikiBrainMemoryAdapter"]
-    wba -.->|"HTTP :8787<br/>NOT IMPLEMENTED"| serve["wiki serve<br/>(does not exist)"]
-    serve -.-> bcdb[("wiki.db")]
-    test["cross-repo test"] -->|"in-process transport"| api["wiki.api"]
-    api --> bcdb
+    ac["AgentConnect<br/>RouterService"] --> ma["MemoryAdapter"]
+    ma -->|"HTTP :8787 (bearer token)"| serve["brainconnect serve"]
+    serve --> bcdb[("trusted memory")]
+    you(["you"]) -->|"human-only promote"| bcdb
 ```
 
-The adapter, the environment variable, and the default URL all exist. The server does not.
-BrainConnect contains no HTTP framework of any kind, and `wiki serve` is a tracked, deferred
-follow-up.
+The adapter, the environment variable, the default URL, and **now the server** all exist. Verified
+in Scenario 2 over real HTTP with a bearer token: capture (with the `system`→`tool` actor mapping),
+a prompt-injection candidate **quarantined at capture**, a promotion blocked by safety raising
+`MemorySafetyRefused` with a full nested envelope, a human promotion, and the resulting trusted
+claim recalled into a task context pack.
 
-The cross-repo integration test substitutes an in-process transport into `wiki.api`. It
-exercises a real ledger, real promotion, and the real trust filter — so the *semantics* are
-verified. The wire is not.
+The trust gradient is one-way and asymmetric by design:
 
-> A green integration suite means the semantics agree, not that the network path exists.
-
-### The intended trust gradient
-
-When Topology B lands, the flow is one-way and asymmetric by design:
-
-- **Capture is write-only.** Workers — including low-tier or remote ones — may contribute
-  findings. Sending data they already hold leaks nothing.
-- **Recall is manager-only.** A worker can add to memory and can never read privileged memory
-  back out.
-- **Re-injection is mediated.** Recalled context flows down into subtasks only through
-  AgentConnect's existing classify-and-redact pass.
-
-This gets durable cross-task memory without inventing a trust tier inside BrainConnect. The
-topology does the work.
+- **Capture is write-only.** Workers — including low-tier or remote ones — may contribute findings.
+- **Recall is manager-only.** A worker can add to memory and never read privileged memory back out.
+- **Re-injection is mediated** through AgentConnect's classify-and-redact pass.
 
 **The rule every consumer must obey:** `trusted: true` is the authority signal.
-`status: "promoted"` is **not**. A promoted claim sitting in an open contradiction comes back
-`promoted` *and* untrusted. A missing `trusted` means untrusted — never infer it from status.
+`status: "promoted"` is **not**. A promoted claim in an open contradiction comes back `promoted`
+*and* untrusted. A missing `trusted` means untrusted — never infer it from status. Independently,
+**trusted is not the same as safe to expose:** safety engines mask, withhold, and flag; no safety
+engine may ever *set* `trusted`. Safety subtracts, it never vouches.
 
-Independently: **trusted is not the same as safe to expose.** Promotion decides authority; it
-says nothing about whether the text carries an API key. Safety engines mask, withhold, and
-flag. No safety engine and no safety policy may ever *set* `trusted` — safety subtracts, it
-never vouches.
+> One honest gap remains in this seam: there is no way to configure the memory adapter's bearer
+> token from the AgentConnect worker side in every path, so a token-protected recall surfaces its
+> `MemoryAuthorizationError` as a **non-fatal warning** rather than succeeding. Capture is
+> unaffected. Recorded in the integration evidence.
+
+### AgentConnect + ComputeConnect ✅ works today
+
+```mermaid
+flowchart LR
+    ac["AgentConnect<br/>HttpLocalComputeProvider"] -->|"6 routes"| cc["computeconnect serve :8090"]
+    cc -->|"privacy filter (CA-1)"| place["placement"]
+    place -->|"public → cloud"| sim["sim-cloud (SIMULATED)"]
+    place -->|"local / sensitive"| llama["llama.cpp :8080 (real)"]
+```
+
+Verified in Scenario 3: health and inventory, local estimate, cloud-only refused when no tier and
+when `repo_sensitive`, cloud-only placed only for `public`, a real generation run, and a streamed
+1024-token run **cancelled mid-stream** (`finish_reason=cancelled`).
+
+### AgentConnect + ToolConnect ⚠️ API-level only
+
+```mermaid
+flowchart TD
+    caller["caller<br/>(AgentConnect-side)"] -.->|"POST /authorize"| tc["toolconnect serve :8095"]
+    caller -.->|"then invokes directly"| tool["MCP tool"]
+    caller -.->|"POST /decisions/{id}/outcome"| tc
+```
+
+Drawn dashed because the binding was exercised at ToolConnect's decision API, **not** through a
+shipped AgentConnect client. Verified in Scenario 4: real MCP stdio ingest of a three-tool server,
+authorize-denies-before-assertion then permit/forbid after, fail-closed on a duplicate identity and
+on post-assertion drift (invocability revoked), and a verifiable audit chain. What is missing is a
+first-class AgentConnect ToolConnect client.
 
 ---
 
-## Complete ecosystem deployment
+## Complete ecosystem composition ✅ verified
 
-**This diagram describes a system that does not exist.** Two of its four products have no
-runtime, and the one implemented cross-product link is the blocked Topology B above. It shows
-where the seams fall given the interfaces and charters that exist today. Nothing here is a
-commitment, and no part of it is installable.
+This is not a diagram of an unbuilt system. Scenario 5 composed all four products end-to-end on
+2026-07-12.
 
 ```mermaid
 flowchart TD
     harness["MCP harness"] --> ac["AgentConnect<br/>control plane"]
     ac --> acdb[("agentconnect.db")]
 
-    ac -.->|"MemoryAdapter<br/>blocked: no wiki serve"| bc["BrainConnect<br/>trusted memory"]
-    bc --> bcdb[("wiki.db")]
+    ac -->|"MemoryAdapter · HTTP :8787"| bc["BrainConnect<br/>trusted memory"]
+    bc --> bcdb[("trusted memory")]
     you(["you"]) -->|"the human gate"| bcdb
 
-    ac -.->|"LocalComputeProvider<br/>contract ships; no implementation"| cc["ComputeConnect<br/>DESIGN PHASE"]
-    cc -.->|"delegates execution"| engines["inference engines<br/>(third-party)"]
+    ac -->|"LocalComputeProvider · :8090"| cc["ComputeConnect<br/>MVP"]
+    cc -->|"real, read-only"| llama["llama.cpp :8080"]
+    cc -.->|"SIMULATED"| sim["cloud provider"]
 
-    harness -.->|"asks: may I call this?"| tc["ToolConnect<br/>VALIDATION PHASE"]
-    harness -.->|"then calls the tool directly"| tools["MCP tools"]
+    caller["caller"] -.->|"authorize · :8095"| tc["ToolConnect<br/>MVP service"]
+    caller -.->|"invokes tool directly"| tools["MCP tools"]
 
-    style cc stroke-dasharray: 5 5
+    style sim stroke-dasharray: 5 5
     style tc stroke-dasharray: 5 5
 ```
 
-What can honestly be said about each dashed edge:
+What Scenario 5 actually proved, honestly:
 
-- **AgentConnect → BrainConnect.** The interface exists and its semantics are tested. It needs
-  an HTTP server on the BrainConnect side. This is the nearest thing to real.
-- **AgentConnect → ComputeConnect.** `LocalComputeProvider` and `HttpLocalComputeProvider`
-  ship in `agentconnect-core` today. ComputeConnect's charter is to be the engine-side manager
-  conforming to that contract. No implementation exists; its architecture proposal is published
-  (`19e1406`) but the repository is documentation only.
-- **Harness → ToolConnect.** Note the shape: the decision arrow and the call arrow are
-  *separate*. ToolConnect answers whether a call is permitted; the caller then invokes the
-  tool itself. ToolConnect is never in the data path. Drawing it inline would misrepresent the
-  architecture, which explicitly rejects the proxy role. Its validation prototype confirms the
-  shape but implements no runtime.
+- **AgentConnect → BrainConnect.** A trusted claim was recalled into an AgentConnect context pack
+  (`authority_trusted=true`), and a new candidate was captured back. Real HTTP. Solid.
+- **AgentConnect → ComputeConnect.** A subtask was placed on the real `qwen3-30b-a3b` engine via a
+  local-manager worker, with route explanation and worker output recorded in the ledger. Solid —
+  but the *cloud alternative it could route to is simulated*, so heterogeneity is still unproven.
+- **Caller → ToolConnect.** A decision was issued (`allow`) and its outcome recorded. Dashed,
+  because the caller wired ToolConnect's API directly rather than through an AgentConnect client.
+- The whole thing ran inside a managed session, the audit **passed**, and the operator — not the
+  agent — marked the task `succeeded`.
 
-The dashed arrows become solid only when something runs.
+The dashed edges become solid when a shipped AgentConnect ToolConnect client exists and when a
+real second compute provider replaces the simulated one.
