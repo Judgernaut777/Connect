@@ -16,8 +16,10 @@ The ecosystem is a set of products that happen to compose, not a distributed sys
 has been chopped into repositories. If a product cannot justify its existence without its
 siblings, it is a module, and it belongs inside one of them.
 
-**In practice:** AgentConnect runs with no memory layer configured. BrainConnect runs with
-no control plane. Neither README asks you to install the other to complete a first task.
+**In practice:** all four products run standalone at `0.1.0`. AgentConnect runs with no memory
+layer configured; BrainConnect runs with no control plane; ComputeConnect serves a model with no
+consumer attached; ToolConnect answers authorization decisions with no agent registered. No
+product's README asks you to install another to complete a first task.
 
 ## 2. Modular architecture
 
@@ -25,10 +27,11 @@ Install what you use. Nothing more should be pulled into your environment becaus
 something else in the family needed it.
 
 **In practice:** AgentConnect ships as nine installable packages — core, cli, router,
-runtime, model-manager, api, mcp, linear, temporal. Core alone gives you the library, not
-the command; the CLI is a separate install. BrainConnect separates the deterministic
-`wiki` command from the model-bearing `wiki-librarian` into two console scripts and two
-processes, precisely so that installing memory does not install an inference dependency.
+runtime, model-manager, api, mcp, linear, temporal, all at a unified `0.1.0`. Core alone gives
+you the library, not the command; the CLI is a separate install. BrainConnect separates the
+deterministic `brainconnect` command from the model-bearing `brainconnect-librarian` into two
+console scripts and two processes, precisely so that installing memory does not install an
+inference dependency.
 
 ## 3. Adapters over forks
 
@@ -57,10 +60,13 @@ The corollary: we integrate third-party software *at its own boundary*, as an op
 engine behind an interface we control. We take its capability; we do not take its
 opinions about our data model.
 
-**In practice:** the MCP servers use `FastMCP` from the official Model Context Protocol
-SDK rather than a hand-rolled protocol implementation. BrainConnect's built-in secret and
-injection scanners are deliberately limited pure-stdlib rulesets; established detectors
-plug in as optional engines behind that seam. Policy stays ours. Detection is theirs.
+**In practice:** the MCP servers use `FastMCP` from the official Model Context Protocol SDK
+rather than a hand-rolled protocol implementation. ComputeConnect routes to a maintained
+llama.cpp engine and never loads a tensor itself. ToolConnect uses Cedar as its policy engine
+rather than inventing an authorization language. BrainConnect's built-in secret and injection
+scanners are deliberately limited pure-stdlib rulesets; established detectors plug in as optional
+engines behind that seam. We own the *domain policy*; we rent the *commodity runtime*. Policy
+stays ours. Detection, transport, and inference are theirs.
 
 ## 5. Lightweight defaults
 
@@ -69,9 +75,11 @@ behaviour is opt-in, and the person opting in should have to say so out loud.
 
 **In practice:** BrainConnect's `recall` returns promoted claims only — no pending, no
 superseded, eight items. Pending material comes back only when explicitly requested, and
-is labelled `trusted: false`. The `wiki` command makes zero model calls by construction,
-not by configuration. The librarian speaks the OpenAI-compatible chat API over stdlib
-HTTP and therefore has **no required dependency** at all.
+is labelled `trusted: false`. The `brainconnect` command makes zero model calls by
+construction, not by configuration. The librarian speaks the OpenAI-compatible chat API over
+stdlib HTTP and therefore has **no required dependency** at all. ComputeConnect's `/generate`
+treats an absent privacy tier as the *most restrictive* one — the conservative default is the
+one you get when you say nothing.
 
 ## 6. Optional advanced integrations
 
@@ -110,14 +118,17 @@ Documentation states what is true now, not what is intended. A passing test suit
 described by what it actually exercises. A missing feature is named as missing, in the
 place a reader would look for it.
 
-Two examples, both currently in the products' own READMEs:
+Three examples, all currently stated in the products' own docs and in
+[COMPATIBILITY.md](COMPATIBILITY.md#known-gaps):
 
-- BrainConnect: reaching it over HTTP needs a `wiki serve` that **does not exist yet**.
-  The cross-repo integration test substitutes an in-process transport. That test drives a
-  real ledger, real promotion, and the real trust filter — but no wire plumbing. So: *a
-  green integration suite means the semantics agree, not that the network path exists.*
-- Safety scanning: an engine that could not run is never mistaken for one that found
-  nothing.
+- ComputeConnect: the runtime is real, but on this single-node host the *second* provider is
+  **simulated**. So the product is called an MVP whose heterogeneity is unproven — not a
+  finished compute fabric. A tested privacy filter is not the same as demonstrated placement
+  across real hardware.
+- Publishing: the PyPI name `brainconnect` is **taken** by an unrelated package. That is
+  written down as a release blocker, not omitted because it is inconvenient — a combined
+  install must use the wheel path, and we say so where a reader would go to install.
+- Safety scanning: an engine that could not run is never mistaken for one that found nothing.
 
 This document is held to the same rule. Where a principle above is aspirational rather
 than enforced, it says so. Where the ecosystem currently falls short — see
