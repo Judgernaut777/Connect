@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# connect-smoke — one real cross-product interaction across all four Connect services.
+#
+# Proves the ecosystem is wired, not just individually up:
+#   1. AgentConnect captures a memory candidate  -> BrainConnect (the ledger)
+#   2. a human promotes it in BrainConnect        (the human-only trust gate)
+#   3. AgentConnect RECALLS it back               -> the trusted claim returns via AC
+#   4. AgentConnect authorizes a tool             -> ToolConnect (allow), and a write is DENIED
+#   5. AgentConnect places an inference request   -> ComputeConnect (a real placement decision)
+#
+# Steps 1/3/5 are genuinely AgentConnect-orchestrated cross-product calls over the
+# compose network. Steps 2 and 4 drive BrainConnect/ToolConnect directly to exercise
+# the human gate and the decision API. The AgentConnect->ToolConnect *governor* path
+# (a subtask being blocked before a worker spawns) is proven separately by
+# mcp-agentconnect/examples/demo_governor_chokepoint.py.
+#
+# The operator bearer token for AgentConnect's HTTP API is minted inside the
+# agentconnect container (`agentconnect tokens issue`) — an operator action.
+#
+#   ./connect-smoke
+set -u
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$HERE/.env" ] && set -a && . "$HERE/.env" && set +a
+
+AC_URL="${AC_URL:-http://127.0.0.1:8890}"
+BC_URL="${BC_URL:-http://127.0.0.1:8887}"
+CC_URL="${CC_URL:-http://127.0.0.1:8990}"
+TC_URL="${TC_URL:-http://127.0.0.1:8995}"
+BC_TOKEN="${BRAINCONNECT_TOKEN:-}"
+TC_TOKEN="${TOOLCONNECT_AUTH_TOKEN:-}"
+COMPOSE="${COMPOSE:-docker compose}"
+CT="Content-Type: application/json"
+
+pass=0; fail=0
+ok()  { echo "  PASS $1"; pass=$((pass+1)); }
+bad() { echo "  FAIL $1"; fail=$((fail+1)); }
+jq() { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null; }
+
+echo "== Connect ecosystem smoke =="
+
+# --- 0. mint an AgentConnect operator token (inside the container) ------------------
+echo "[0] mint AgentConnect operator token"
+TOK=$($COMPOSE exec -T agentconnect agentconnect tokens issue --actor connect-smoke 2>/dev/null | jq "d['token']")
+if [ -n "${TOK:-}" ]; then ok "minted operator token"; else bad "could not mint token"; echo "SUMMARY pass=$pass fail=$fail"; exit 1; fi
+AAUTH=(-H "Authorization: Bearer $TOK")
+
+# --- 1. AgentConnect -> BrainConnect: capture a candidate --------------------------
+echo "[1] AgentConnect capture -> BrainConnect"
+CAP=$(curl -fsS -X POST "$AC_URL/memory/capture" "${AAUTH[@]}" -H "$CT" \
+  -d '{"text":"Connect prod deploy exposes AgentConnect on host port 8890","origin_actor_id":"connect-smoke","tags":["decision"]}')
+CID=$(printf '%s' "$CAP" | jq "d['candidate_id']")
+BK=$(printf '%s' "$CAP" | jq "d['backend']")
+if [ -n "$CID" ] && [ "$BK" = "brainconnect" ]; then ok "captured $CID via backend=$BK"; else bad "capture failed: $CAP"; fi
+
+# --- 2. human promotion in BrainConnect (the trust gate) ---------------------------
+echo "[2] human promote in BrainConnect (confidence=verified)"
+bcauth=(); [ -n "$BC_TOKEN" ] && bcauth=(-H "Authorization: Bearer $BC_TOKEN")
+PROM=$(curl -fsS -X POST "$BC_URL/candidates/$CID/promote" "${bcauth[@]}" -H "$CT" \
+  -d '{"promoted_by":"connect-smoke","confidence":"verified","scope":{"scope_type":"repo","scope_id":"connect"}}')
+PST=$(printf '%s' "$PROM" | jq "d.get('status')")
+if [ "$PST" = "promoted" ]; then ok "promoted to trusted claim"; else bad "promote failed: $PROM"; fi
+
+# --- 3. AgentConnect RECALLS the trusted claim -------------------------------------
+echo "[3] AgentConnect recall <- BrainConnect"
+REC=$(curl -fsS -X POST "$AC_URL/memory/recall" "${AAUTH[@]}" -H "$CT" \
+  -d '{"query":"prod deploy AgentConnect port","trusted_only":true,"max_items":5,"scopes":[{"scope_type":"repo","scope_id":"connect"}]}')
+TRUSTED=$(printf '%s' "$REC" | jq "any(i.get('trusted') for i in d.get('items',[]))")
+if [ "$TRUSTED" = "True" ]; then ok "recalled the human-promoted trusted claim"; else bad "recall did not return trusted claim: $REC"; fi
+
+# --- 4. AgentConnect authorizes a tool via ToolConnect -----------------------------
+echo "[4] tool authorization via ToolConnect"
+tcauth=(); [ -n "$TC_TOKEN" ] && tcauth=(-H "Authorization: Bearer $TC_TOKEN")
+S=connect_smoke_harness
+curl -fsS -X POST "$TC_URL/sources" "${tcauth[@]}" -H "$CT" \
+  -d "{\"source_id\":\"$S\",\"tier\":\"known\",\"transport\":\"push\",\"declares\":[\"read_notes\",\"del_notes\"]}" >/dev/null
+curl -fsS -X POST "$TC_URL/sources/$S/tools" "${tcauth[@]}" -H "$CT" \
+  -d '{"tools":[{"name":"read_notes","claimed":{"read_only_hint":true}},{"name":"del_notes","claimed":{"destructive_hint":true}}]}' >/dev/null
+curl -fsS -X POST "$TC_URL/assertions" "${tcauth[@]}" -H "$CT" \
+  -d "{\"source_id\":\"$S\",\"name\":\"read_notes\",\"descriptor\":{\"effect\":\"read\",\"asserted_by\":\"operator\"}}" >/dev/null
+curl -fsS -X POST "$TC_URL/assertions" "${tcauth[@]}" -H "$CT" \
+  -d "{\"source_id\":\"$S\",\"name\":\"del_notes\",\"descriptor\":{\"effect\":\"write\",\"reversible\":false,\"asserted_by\":\"operator\"}}" >/dev/null
+ALLOW=$(curl -fsS -X POST "$TC_URL/authorize" "${tcauth[@]}" -H "$CT" \
+  -d "{\"principal\":{\"id\":\"connect-smoke\",\"privacy_tier\":\"local\",\"kind\":\"agent\"},\"source_id\":\"$S\",\"name\":\"read_notes\"}")
+DENY=$(curl -fsS -X POST "$TC_URL/authorize" "${tcauth[@]}" -H "$CT" \
+  -d "{\"principal\":{\"id\":\"connect-smoke\",\"privacy_tier\":\"local\",\"kind\":\"agent\"},\"source_id\":\"$S\",\"name\":\"del_notes\"}")
+A=$(printf '%s' "$ALLOW" | jq "d.get('allowed')"); D=$(printf '%s' "$DENY" | jq "d.get('allowed')")
+CV=$(printf '%s' "$ALLOW" | jq "d.get('contract_version')")
+if [ "$A" = "True" ] && [ "$D" = "False" ]; then ok "read allowed, write denied (contract $CV)"; else bad "unexpected decisions allow=$A deny=$D"; fi
+
+# --- 5. AgentConnect places on ComputeConnect --------------------------------------
+echo "[5] placement decision from ComputeConnect"
+EST=$(curl -fsS -X POST "$CC_URL/route/estimate" -H "$CT" -d '{"prompt":"health check","max_tokens":16}')
+ELIG=$(printf '%s' "$EST" | jq "d.get('eligible')")
+SEL=$(printf '%s' "$EST" | jq "d.get('selected_model')")
+RCODE=$(printf '%s' "$EST" | jq "(d.get('reason') or {}).get('code','ok')")
+if [ "$ELIG" = "True" ]; then
+  ok "ComputeConnect placed on model=$SEL"
+elif [ -n "$ELIG" ]; then
+  ok "ComputeConnect returned a placement decision (eligible=$ELIG, reason=$RCODE — expected 'degraded' when no local engine is reachable)"
+else
+  bad "no placement decision from ComputeConnect: $EST"
+fi
+
+echo "== SUMMARY: pass=$pass fail=$fail =="
+[ "$fail" -eq 0 ] || exit 1

@@ -1,0 +1,125 @@
+# Connect ecosystem — full-stack deployment.
+#
+# One service per product, each built from its PUSHED product repo (siblings of the
+# Connect repo under the same parent directory). AgentConnect is wired over the compose
+# network to the other three via service-name URLs.
+#
+#   cp .env.example .env   # then edit tokens
+#   docker compose build
+#   docker compose up -d
+#   ./connect-health       # all four services
+#   ./connect-smoke        # one real cross-product interaction
+#   docker compose down
+#
+# Host port map (deliberately off the reserved host ports 8080/8091/8787/8090/8095/8790):
+#   AgentConnect  8890 -> 8790     BrainConnect 8887 -> 8787
+#   ComputeConnect 8990 -> 8090    ToolConnect  8995 -> 8095
+name: connect
+
+services:
+  brainconnect:
+    build:
+      context: ../../WikiBrain
+      dockerfile: ../Connect/deploy/brainconnect.Dockerfile
+    image: connect/brainconnect:0.1.0
+    environment:
+      BRAINCONNECT_TOKEN: ${BRAINCONNECT_TOKEN:?set BRAINCONNECT_TOKEN in .env}
+    volumes:
+      - brainconnect-data:/data
+    ports:
+      - "8887:8787"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8787/health',timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+
+  toolconnect:
+    build:
+      context: ../../ToolConnect
+      dockerfile: ../Connect/deploy/toolconnect.Dockerfile
+    image: connect/toolconnect:0.1.0
+    environment:
+      TOOLCONNECT_AUTH_TOKEN: ${TOOLCONNECT_AUTH_TOKEN:?set TOOLCONNECT_AUTH_TOKEN in .env}
+    volumes:
+      - toolconnect-data:/data
+      - ./policies.cedar:/etc/toolconnect/policy.cedar:ro
+    ports:
+      - "8995:8095"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request;r=urllib.request.Request('http://localhost:8095/health',headers={'Authorization':'Bearer '+os.environ['TOOLCONNECT_AUTH_TOKEN']});urllib.request.urlopen(r,timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+
+  computeconnect:
+    build:
+      context: ../../ComputeConnect
+      dockerfile: ../Connect/deploy/computeconnect.Dockerfile
+    image: connect/computeconnect:0.1.0
+    environment:
+      COMPUTECONNECT_UPSTREAM: ${COMPUTECONNECT_UPSTREAM:-http://host.docker.internal:8080}
+    extra_hosts:
+      # Lets the container reach a host-run engine on Linux. If that engine binds the
+      # host loopback only, it stays unreachable and ComputeConnect reports "degraded".
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8990:8090"
+    healthcheck:
+      # /health returns 200 even when degraded (the JSON `status` field carries the
+      # degraded/down detail), so this proves the control plane is up, not that a
+      # model is reachable.
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8090/health',timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+
+  agentconnect:
+    build:
+      context: ../../mcp-agentconnect
+      dockerfile: ../Connect/deploy/agentconnect.Dockerfile
+    image: connect/agentconnect:0.1.0
+    environment:
+      AGENTCONNECT_API_HOST: 0.0.0.0
+      AGENTCONNECT_API_PORT: "8790"
+      # Memory: setting BRAINCONNECT_URL selects and enables the brainconnect memory
+      # backend (the MemoryAdapter). This is the concrete wiring behind "AGENTCONNECT
+      # memory = brainconnect backend".
+      BRAINCONNECT_URL: http://brainconnect:8787
+      BRAINCONNECT_TOKEN: ${BRAINCONNECT_TOKEN:?set BRAINCONNECT_TOKEN in .env}
+      # Compute: registers the local-manager worker pointed at ComputeConnect.
+      AGENTCONNECT_COMPUTE_URL: http://computeconnect:8090
+      # Tool governance: binds the fail-closed ToolConnect governor.
+      AGENTCONNECT_TOOLCONNECT_URL: http://toolconnect:8095
+      AGENTCONNECT_TOOLCONNECT_TOKEN: ${TOOLCONNECT_AUTH_TOKEN:?set TOOLCONNECT_AUTH_TOKEN in .env}
+      AGENTCONNECT_TOOLCONNECT_MODE: ${AGENTCONNECT_TOOLCONNECT_MODE:-advisory}
+      AGENTCONNECT_WORKERS: echo
+    volumes:
+      - agentconnect-data:/data
+    ports:
+      - "8890:8790"
+    depends_on:
+      brainconnect:
+        condition: service_healthy
+      toolconnect:
+        condition: service_healthy
+      computeconnect:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8790/health',timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  brainconnect-data:
+  toolconnect-data:
+  agentconnect-data:

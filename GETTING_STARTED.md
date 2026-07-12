@@ -169,7 +169,9 @@ All four products are installable, so a combined install is real. See
 + ComputeConnect, + ToolConnect) and the verified single-venv four-product install (86 packages,
 zero conflicts).
 
-One caveat carries into every combined recipe: **the PyPI name `brainconnect` is taken by an
-unrelated package**, so BrainConnect must be installed by wheel path or from a checkout, never by
-bare name. Read [COMPATIBILITY.md](COMPATIBILITY.md) alongside it for the Python floor, the port
-registry, and the contract amendments.
+One naming rule carries into every combined recipe: **BrainConnect's PyPI distribution is
+`brainconnect-ai`** (`pip install brainconnect-ai`), because the bare `brainconnect` name belongs
+to an unrelated package. The import package and the console command both stay `brainconnect`. This
+is resolved, not a blocker — just never `pip install brainconnect` bare. Read
+[COMPATIBILITY.md](COMPATIBILITY.md) alongside it for the Python floor, the port registry, and the
+contract amendments, and [deploy/](deploy/) for the container deployment of all four at once.

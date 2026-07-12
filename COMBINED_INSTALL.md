@@ -3,7 +3,8 @@
 Running more than one Connect product together. All four products are installable at `0.1.0`.
 
 Read [COMPATIBILITY.md](COMPATIBILITY.md) alongside this — especially the Python floor (3.11 for
-a single-venv install), the port registry, and the one real caveat below.
+a single-venv install), the port registry, and the naming note below. For the containerised
+four-service deployment, see [deploy/](deploy/).
 
 > **Name note: BrainConnect's PyPI distribution is `brainconnect-ai`.** The plain `brainconnect`
 > name is owned on PyPI by an unrelated neuroscience package, so BrainConnect publishes as
@@ -83,11 +84,15 @@ BrainConnect now ships an HTTP server, so the memory adapter has something real 
 # In the BrainConnect venv — serve the ledger with a bearer token:
 .venv/bin/brainconnect serve --port 8787 --token "$BC_TOKEN"
 
-# In the AgentConnect environment — point the memory adapter at it:
-export AGENTCONNECT_MEMORY_BACKEND=brainconnect
+# In the AgentConnect environment — setting BRAINCONNECT_URL both selects and enables
+# the brainconnect memory backend (there is no separate "backend" switch):
 export BRAINCONNECT_URL="http://localhost:8787"
 export BRAINCONNECT_TOKEN="$BC_TOKEN"
 ```
+
+Verified: with those two variables set, `agentconnect-api`'s `GET /health` reports
+`"memory_backend":"brainconnect"`, and an AgentConnect `POST /memory/recall` returns a
+human-promoted claim fetched from BrainConnect over HTTP.
 
 The trust gradient is one-way by design: workers may **capture** (write-only), only a manager may
 **recall**, and re-injection flows through AgentConnect's classify-and-redact pass. Promotion is
@@ -109,14 +114,17 @@ agent must call `brain_capture` itself.
 # In the ComputeConnect venv:
 .venv/bin/computeconnect serve --port 8090
 
-# In the AgentConnect environment — its shipped HttpLocalComputeProvider targets it:
-export COMPUTECONNECT_URL="http://localhost:8090"
+# In the AgentConnect environment — AGENTCONNECT_COMPUTE_URL registers ComputeConnect
+# as the `local-manager` routing worker (env wins over config/compute.yaml):
+export AGENTCONNECT_COMPUTE_URL="http://localhost:8090"
 ```
 
 `/generate` defaults to the most restrictive privacy tier when none is supplied (CA-1), and cloud
 placement requires positive re-verification; a `run_id` is echoed as `X-Run-Id` and is cancellable
-via `POST /runs/{run_id}/cancel` (CA-3). **Note:** registering ComputeConnect as an AgentConnect
-routing worker is currently programmatic — there is no env/YAML declaration surface for it yet.
+via `POST /runs/{run_id}/cancel` (CA-3). Registration is now **declarative**: verified that with
+`AGENTCONNECT_COMPUTE_URL` set, `agentconnect-api`'s `GET /health` lists `local-manager` among its
+workers. On a host/venv where ComputeConnect can reach the host llama.cpp, its `/route/estimate`
+returns `eligible=true` selecting the local model.
 
 ### AgentConnect + ToolConnect (fail-closed tool governance)
 
@@ -126,9 +134,18 @@ routing worker is currently programmatic — there is no env/YAML declaration su
 .venv/bin/toolconnect serve --db ./toolconnect.db --policies examples/policies.cedar
 ```
 
-The caller asks `POST /authorize` before invoking a tool, performs the call itself, and closes the
-loop with `POST /decisions/{id}/outcome`. **This binding is API-level only:** AgentConnect ships no
-ToolConnect client, so today you wire the two through ToolConnect's HTTP API directly.
+```bash
+# In the AgentConnect environment — bind the fail-closed governor:
+export AGENTCONNECT_TOOLCONNECT_URL="http://localhost:8095"
+export AGENTCONNECT_TOOLCONNECT_TOKEN="$TC_TOKEN"   # if the server was started with a token
+export AGENTCONNECT_TOOLCONNECT_MODE=required        # fail-closed; `advisory` logs but does not block
+```
+
+AgentConnect ships a first-class client: `agentconnect-core`'s `ToolConnectGovernor` consults
+`POST /authorize` before a worker with declared tools runs, and closes the loop with
+`POST /decisions/{id}/outcome`. It is **fail-closed** — an unreachable decision point denies. A
+denied tool blocks the subtask **before** the worker spawns. Verified against a live server: a
+read tool is allowed, a write tool is denied, and decisions carry `contract_version: "1.0"`.
 
 ---
 
@@ -182,8 +199,45 @@ agentconnect --help && brainconnect --help && computeconnect --help && toolconne
 - **No shared trust model.** A completed AgentConnect task is not a promoted BrainConnect claim,
   and never becomes one without a human.
 - **No shared database.** Each product keeps its own store, lifecycle, and backup job.
-- **No first-class ToolConnect client in AgentConnect**, and **no declaration surface** for
-  registering ComputeConnect as a routing worker — both are wired programmatically or at the API.
+- **No automatic promotion or shared trust.** The seams are wired (memory backend, compute worker,
+  and the fail-closed ToolConnect governor all bind via environment variables), but a completed
+  AgentConnect task never becomes a trusted BrainConnect claim without a human.
 
 If you want one system rather than a set of composable tools, the seams are real and tested — but
 the coupling is deliberately thin, and the human gate is deliberately non-negotiable.
+
+---
+
+## Three-product and four-product, wired (env-driven)
+
+The two-product seams compose. Point AgentConnect at any subset by setting the relevant
+variables; unset ones simply leave that subsystem off (standalone behaviour is unchanged).
+
+```bash
+# AgentConnect API wired to all three peers at once:
+export BRAINCONNECT_URL="http://localhost:8787"        BRAINCONNECT_TOKEN="$BC_TOKEN"
+export AGENTCONNECT_COMPUTE_URL="http://localhost:8090"
+export AGENTCONNECT_TOOLCONNECT_URL="http://localhost:8095" AGENTCONNECT_TOOLCONNECT_TOKEN="$TC_TOKEN"
+export AGENTCONNECT_TOOLCONNECT_MODE=advisory
+agentconnect-api      # GET /health then reports memory_backend=brainconnect and worker local-manager
+```
+
+Two-product subsets are just this with two of the three blocks omitted (AC+BC, AC+CC, AC+TC).
+
+### Host-venv deployment (ComputeConnect `ok`)
+
+The four-service stack also runs as **host processes in one venv** — useful when you want
+ComputeConnect to reach a host-loopback engine (which a container cannot). This is the same
+wiring the [deploy/](deploy/) Compose stack uses, minus containers. Verified on this host:
+BrainConnect, ToolConnect and ComputeConnect on fresh ports, AgentConnect wired to all three;
+`GET /health` on ComputeConnect reported `status: ok` with `local-llamacpp healthy`, and a
+`/generate` placed real output on `qwen3-30b-a3b`. The **container** deployment reports
+ComputeConnect `degraded` instead, because the host llama.cpp is loopback-bound and unreachable
+from inside a container — see [deploy/README.md](deploy/README.md#why-computeconnect-is-degraded-in-docker-and-ok-on-a-hostvenv).
+
+### Or just use Docker Compose
+
+[deploy/](deploy/) ships a four-service `docker-compose.yml` that builds all four images from these
+repos and wires them together, plus `connect-health` and `connect-smoke`. That is the shortest path
+to a running ecosystem; it was built and run, and its captured output is in
+[deploy/README.md](deploy/README.md).

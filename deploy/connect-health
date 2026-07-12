@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# connect-health — one command that checks all four Connect services.
+#
+# Hits GET /health on AgentConnect, BrainConnect, ComputeConnect and ToolConnect and
+# prints a one-line verdict for each. Exit 0 only if all four answer; ComputeConnect
+# "degraded" (no reachable upstream engine) still counts as up — the control plane is
+# answering. Reads tokens from ./.env if present (BrainConnect and ToolConnect need a
+# bearer token on /health when one is configured; BrainConnect's /health is open, so
+# only ToolConnect's token is strictly required here).
+#
+#   ./connect-health
+#   AC_URL=http://host:8890 TC_URL=... ./connect-health   # override endpoints
+set -u
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$HERE/.env" ] && set -a && . "$HERE/.env" && set +a
+
+AC_URL="${AC_URL:-http://127.0.0.1:8890}"
+BC_URL="${BC_URL:-http://127.0.0.1:8887}"
+CC_URL="${CC_URL:-http://127.0.0.1:8990}"
+TC_URL="${TC_URL:-http://127.0.0.1:8995}"
+TC_TOKEN="${TOOLCONNECT_AUTH_TOKEN:-}"
+
+rc=0
+say() { printf '%-14s %s\n' "$1" "$2"; }
+
+# AgentConnect
+if body=$(curl -fsS "$AC_URL/health" 2>/dev/null); then
+  mem=$(printf '%s' "$body" | python3 -c "import sys,json;print(json.load(sys.stdin).get('memory_backend'))" 2>/dev/null)
+  say "AgentConnect" "UP    (memory_backend=$mem)"
+else
+  say "AgentConnect" "DOWN  ($AC_URL)"; rc=1
+fi
+
+# BrainConnect (open /health)
+if body=$(curl -fsS "$BC_URL/health" 2>/dev/null); then
+  ok=$(printf '%s' "$body" | python3 -c "import sys,json;print(json.load(sys.stdin).get('ok'))" 2>/dev/null)
+  say "BrainConnect" "UP    (ok=$ok)"
+else
+  say "BrainConnect" "DOWN  ($BC_URL)"; rc=1
+fi
+
+# ComputeConnect (degraded is still up)
+if body=$(curl -fsS "$CC_URL/health" 2>/dev/null); then
+  st=$(printf '%s' "$body" | python3 -c "import sys,json;print(json.load(sys.stdin).get('status'))" 2>/dev/null)
+  say "ComputeConnect" "UP    (status=$st)"
+else
+  say "ComputeConnect" "DOWN  ($CC_URL)"; rc=1
+fi
+
+# ToolConnect (bearer required when a token is set)
+auth=(); [ -n "$TC_TOKEN" ] && auth=(-H "Authorization: Bearer $TC_TOKEN")
+if body=$(curl -fsS "${auth[@]}" "$TC_URL/health" 2>/dev/null); then
+  chain=$(printf '%s' "$body" | python3 -c "import sys,json;print(json.load(sys.stdin).get('audit_chain_ok'))" 2>/dev/null)
+  say "ToolConnect" "UP    (audit_chain_ok=$chain)"
+else
+  say "ToolConnect" "DOWN  ($TC_URL — token set? \$TOOLCONNECT_AUTH_TOKEN)"; rc=1
+fi
+
+[ "$rc" -eq 0 ] && echo "OK: all four services up." || echo "FAIL: one or more services unreachable."
+exit $rc
