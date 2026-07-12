@@ -39,6 +39,13 @@ at `Connect/deploy/` next to those checkouts.
 ## Run it
 
 ```bash
+# Reproducible build: check out the release you want in each sibling repo first.
+# Compose builds each image from the sibling repo's WORKING TREE (context: ../../<repo>),
+# so the images reflect whatever is checked out there — pin it to the release tag:
+for r in ../../mcp-agentconnect ../../WikiBrain ../../ComputeConnect ../../ToolConnect; do
+  git -C "$r" checkout v0.1.0-rc2      # or the tag you are deploying
+done
+
 cd Connect/deploy
 cp .env.example .env          # then edit: set real BRAINCONNECT_TOKEN + TOOLCONNECT_AUTH_TOKEN
 docker compose build
@@ -48,6 +55,10 @@ docker compose up -d
 # ... when done:
 docker compose down           # add -v to also drop the data volumes
 ```
+
+> The four `context:` paths point at the sibling checkouts, not at a pinned git ref — Docker
+> build contexts are directories, not tags. Checking out the release tag in each repo before
+> `docker compose build` is what makes the built images correspond to that release.
 
 Generate strong tokens with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
