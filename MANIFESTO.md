@@ -125,9 +125,10 @@ Three examples, all currently stated in the products' own docs and in
   **simulated**. So the product is called an MVP whose heterogeneity is unproven — not a
   finished compute fabric. A tested privacy filter is not the same as demonstrated placement
   across real hardware.
-- Publishing: the PyPI name `brainconnect` is **taken** by an unrelated package. That is
-  written down as a release blocker, not omitted because it is inconvenient — a combined
-  install must use the wheel path, and we say so where a reader would go to install.
+- Publishing: the bare PyPI name `brainconnect` is taken by an unrelated package, so BrainConnect
+  publishes as **`brainconnect-ai`** while keeping `brainconnect` as its import package and command.
+  This was a release blocker; it is resolved. We still say plainly, everywhere a reader installs,
+  never to `pip install brainconnect` bare.
 - Safety scanning: an engine that could not run is never mistaken for one that found nothing.
 
 This document is held to the same rule. Where a principle above is aspirational rather

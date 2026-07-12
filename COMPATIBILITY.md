@@ -23,9 +23,10 @@ real, unified thing. Every product declares `Apache-2.0` as a PEP 639 SPDX
 
 ### How to pin
 
-Both installed-from-checkout products (`pip install -e`) should be pinned to a commit SHA or the
-`0.1.0` tag under an editable install. For the combined install, BrainConnect must be pinned by
-**wheel path or checkout**, never by PyPI name — see [gap 1](#1-pypi-name-collision-brainconnect-is-taken).
+Pin each product to the `0.1.0` tag (or a commit SHA under an editable install). BrainConnect
+installs by its PyPI **distribution name `brainconnect-ai`** (`pip install "brainconnect-ai==0.1.0"`)
+— the import package and command stay `brainconnect`; never `pip install brainconnect` bare. See
+[note 1](#1-pypi-name--resolved-via-brainconnect-ai).
 
 ---
 
@@ -39,11 +40,16 @@ Phase-5 integration run on 2026-07-12 (real HTTP or MCP stdio, not an in-process
 | 0.1.0 | — | — | in-process + managed shell | ✅ | Full task loop driving a real `claude -p`; managed session cannot complete its own task |
 | 0.1.0 | BrainConnect | 0.1.0 | HTTP `:8787` (bearer token) | ✅ | Capture, quarantine-on-injection, human-only promotion, nested refusal envelope, recall into a context pack |
 | 0.1.0 | ComputeConnect | 0.1.0 | HTTP `:8090` (six routes) | ✅ | Real llama.cpp streaming generation, mid-stream cancel, CA-1 default-deny, CA-3 `run_id` |
-| 0.1.0 | ToolConnect | 0.1.0 | HTTP `:8095` + MCP stdio | ⚠️ API-level | Real MCP ingest, authorize/outcome loop, fail-closed ambiguity/drift — but no shipped AgentConnect-side client |
-| 0.1.0 | all three | 0.1.0 | composed | ✅ | Four-product composition end-to-end (Scenario 5) |
+| 0.1.0 | ToolConnect | 0.1.0 | HTTP `:8095` + MCP stdio | ✅ | Fail-closed `ToolConnectGovernor` in `agentconnect-core`: allow read / deny write, contract `1.0`, subtask blocked before worker spawn |
+| 0.1.0 | all three | 0.1.0 | composed (Docker) | ✅ | Four-service Compose stack builds + comes up healthy; `connect-smoke` passes 6/6 (see [deploy/](deploy/)) |
 
-The ToolConnect row is marked ⚠️ because the binding is exercised at ToolConnect's decision API,
-not through a first-class AgentConnect integration. See [gap 2](#2-agentconnect--toolconnect-is-api-level-only).
+The ToolConnect row is now ✅: `agentconnect-core` ships the `ToolConnectGovernor`, verified
+end-to-end this cycle. See [note 2](#2-agentconnect--toolconnect--first-class-fail-closed-governor-shipped).
+
+The composed row was verified in Docker Compose: all four images build, all four report healthy
+(ComputeConnect `degraded` because the host llama.cpp is loopback-bound and unreachable from the
+container — the control plane still answers), and the cross-product smoke passes. Exact recipe and
+captured output live in [deploy/README.md](deploy/README.md).
 
 ---
 
@@ -80,16 +86,42 @@ Cross-product surface is expressed as an interface in `agentconnect-core`, never
 - **Amendment CA-3 (run identity).** A `run_id` is accepted in the request body and echoed as an
   `X-Run-Id` header; `GET /runs/{run_id}` returns run metadata and cancellation state. Verified
   in Scenario 3 (a 1024-token generation cancelled mid-stream reported `finish_reason=cancelled`).
+- **More-restrictive precedence.** When a privacy tier arrives on both the `X-Privacy-Tier`
+  header and the request body, the **more restrictive** of the two wins — a request can be tightened
+  by either channel, never loosened. Default-deny still holds when neither is present.
+- **Declarative registration.** Setting `AGENTCONNECT_COMPUTE_URL` (env wins over
+  `config/compute.yaml`) registers ComputeConnect as the `local-manager` worker; verified — it then
+  appears in AgentConnect's `GET /health` worker list. Optional `AGENTCONNECT_COMPUTE_TOKEN` /
+  `_TIMEOUT`.
 - CA-2 remains *proposed*, not implemented.
 
 ### ToolConnect decision API — AgentConnect ↔ ToolConnect
 
-- There is **no shared `agentconnect-core` interface** for tool governance; ToolConnect defines
-  its own HTTP surface, documented in its `docs/SERVICE.md` and pinned by
-  `docs/AGENTCONNECT_CONTRACT.md`. `/authorize` returns a Decision; the caller executes the tool
-  and closes the loop via `POST /decisions/{id}/outcome`. There is no invocation route.
-- **This binding is API-level only.** AgentConnect ships no ToolConnect client; the contract was
-  exercised against ToolConnect's API directly. See [gap 2](#2-agentconnect--toolconnect-is-api-level-only).
+- ToolConnect defines its own HTTP surface (its `docs/SERVICE.md`, pinned by
+  `docs/AGENTCONNECT_CONTRACT.md`). `POST /authorize` returns a Decision carrying
+  `contract_version` (currently **`1.0`**), `allowed`, `decision_id`, `reason`,
+  `determining_policies`, and `default_deny`; the caller executes the tool and closes the loop
+  via `POST /decisions/{id}/outcome`. There is **no invocation route** — ToolConnect decides, it
+  does not execute.
+- **AgentConnect ships a first-class client.** `agentconnect-core`'s `ToolConnectGovernor`
+  (bound via `AGENTCONNECT_TOOLCONNECT_URL` / `_TOKEN` / `_MODE`) consults `/authorize` and is
+  **fail-closed**: an unreachable point, an unasserted tool, or an unrecognised contract **major**
+  all deny. A denied tool blocks the subtask before the worker spawns. Verified this cycle: read
+  allowed (`permitted by local-reads`), write denied (`default deny: no policy matched`), contract
+  `1.0`; `deploy/connect-smoke` exercises it and `examples/demo_governor_chokepoint.py` proves the
+  subtask-block. See [note 2](#2-agentconnect--toolconnect--first-class-fail-closed-governor-shipped).
+
+### Observability event model — AgentConnect
+
+- AgentConnect emits a provider-neutral **observation event** stream; providers are additive and
+  fail-isolated. Configured via `AGENTCONNECT_OBSERVABILITY` (`structured_log`, `tmux`, `herdr`,
+  `otlp`), with `_FAILURE_POLICY` (`advisory`|`task_blocking`|`startup_fatal`), a JSONL
+  `_LOG_PATH`, tmux socket/layout, Herdr enable+socket, and `AGENTCONNECT_OTLP_ENDPOINT`.
+- Verified this cycle: `structured_log` and `tmux` (tmux 3.3a) report **available**; `herdr`
+  reports its own failure with an actionable message when no socket is configured, and the other
+  providers still come up. Consumed by `agentconnect agents list|tree|watch|attach|output|events|
+  cancel` and `agentconnect observability providers|health`; `agents output` is bounded and
+  redacted through the service's safety redactor. Full guide: [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md).
 
 There is no shared package and no monorepo. Separate repositories, explicit interfaces.
 
@@ -118,13 +150,17 @@ AgentConnect's own HTTP API has no fixed default port (it is configured explicit
 
 | Product | Default port | Notes |
 |---|---|---|
-| AgentConnect HTTP API | Configurable | No fixed default; set the host/port explicitly. Authorization is enforced on every route. |
+| AgentConnect HTTP API | `127.0.0.1:8790` | `agentconnect-api`; `AGENTCONNECT_API_HOST`/`_PORT` (default port `8790`). Authorization enforced on every route except `/health`. |
 | BrainConnect HTTP API | `127.0.0.1:8787` | `brainconnect serve`; optional bearer token. The memory adapter targets this by default. |
 | ComputeConnect HTTP API | `8090` | `computeconnect serve`. `8080` is the external llama.cpp engine (not a Connect product). |
 | ToolConnect HTTP API | `127.0.0.1:8095` | `toolconnect serve`; loopback only. |
 
 External, not a Connect product: the local llama.cpp inference engine on `:8080`, which
 ComputeConnect consumes **read-only** and never manages.
+
+The [deploy/](deploy/) Compose stack maps these container defaults to **off-reserved host ports**
+to coexist with a running llama.cpp: AgentConnect `8890→8790`, BrainConnect `8887→8787`,
+ComputeConnect `8990→8090`, ToolConnect `8995→8095`.
 
 ---
 
@@ -159,31 +195,45 @@ completion is attributed to the authenticated principal. An **independent securi
 cycle re-ran the full bypass and confirmed it stays fixed** (`tests/test_http_authorization.py`
 stands up a real uvicorn server on a real port).
 
-### 1. PyPI name collision: `brainconnect` is taken
+### 1. PyPI name — RESOLVED via `brainconnect-ai`
 
-The name `brainconnect` is already registered on PyPI by an unrelated package. `pip install
-brainconnect` from PyPI resolves that other project, not this one. **Consequences:**
-
-- BrainConnect cannot be published to PyPI under this name without a rename or a namespace/scope.
-  This is a real **release blocker** for PyPI publication.
-- A combined install must install BrainConnect **by wheel path or from a checkout** (or with
-  `--no-index --find-links`), never by bare name. See [COMBINED_INSTALL.md](COMBINED_INSTALL.md).
+The bare name `brainconnect` is registered on PyPI by an unrelated package, so BrainConnect
+publishes under the distribution name **`brainconnect-ai`**: `pip install brainconnect-ai`. A
+distribution name may differ from what it imports — the **import package and the console command
+both stay `brainconnect`**. This is **resolved**, not a release blocker. The only rule that
+survives: never `pip install brainconnect` bare, or you fetch the stranger's library. Verified in
+this cycle — `brainconnect-ai` installs cleanly alongside `agentconnect-*`, `computeconnect`, and
+`toolconnect` in one virtualenv (86 packages, `pip check` clean), and as the `connect/brainconnect`
+container image in [deploy/](deploy/).
 
 The names `agentconnect-*`, `computeconnect`, and `toolconnect` are free on PyPI.
 
-### 2. AgentConnect ↔ ToolConnect is API-level only
+> **Deploy-layer dependency note (found while building [deploy/](deploy/)):** `agentconnect-core`
+> lazily `import httpx` in all three of its HTTP clients (memory adapter, ComputeConnect provider,
+> ToolConnect governor) but declares only `pydantic` + `pyyaml`. A base `agentconnect-api` install
+> therefore cannot reach the sibling services until `httpx` is present. In a combined venv this is
+> masked (ComputeConnect depends on `httpx>=0.27`); the Compose AgentConnect image installs it
+> explicitly. Reported upstream; the fix is to add `httpx` to `agentconnect-core`'s dependencies.
 
-ToolConnect's decision API is real and proven, but AgentConnect ships **no ToolConnect client**.
-The Phase-5 binding was exercised against ToolConnect's `/authorize` and `/decisions/{id}/outcome`
-directly. A first-class AgentConnect integration is not yet built.
+### 2. AgentConnect ↔ ToolConnect — first-class fail-closed governor shipped
+
+`agentconnect-core` now ships a real `ToolConnectGovernor` client. AgentConnect consults it as a
+genuine chokepoint: a denied tool blocks a subtask **before** its worker spawns, and an unreachable
+decision point **denies** (fail-closed — the one place AgentConnect departs from "adapters fail
+open"). Verified end-to-end this cycle against a live `toolconnect serve`: a read tool is allowed,
+a write tool is denied, decisions carry contract version `1.0`, and the cross-product smoke in
+[deploy/connect-smoke](deploy/connect-smoke) exercises exactly this. See
+`mcp-agentconnect/examples/demo_governor_chokepoint.py` for the subtask-blocking proof.
 
 ### 3. ComputeConnect heterogeneity is unproven; the second provider is simulated
 
 ComputeConnect's runtime is real, but on this single accelerator-less ARM host only one provider
 (the local llama.cpp engine) is real; the second is a **simulated** cloud provider. The routing
 and privacy machinery is exercised, but placement across genuinely heterogeneous hardware is
-**not demonstrated**. Registering ComputeConnect as an AgentConnect routing worker is also
-**programmatic only** — no environment/YAML declaration surface exists yet.
+**not demonstrated**. Registering ComputeConnect as an AgentConnect routing worker is now
+**declarative** — `AGENTCONNECT_COMPUTE_URL` (or `config/compute.yaml`) registers the
+`local-manager` worker, which then appears in AgentConnect's `GET /health`. Verified in the
+Compose stack; only the heterogeneity claim remains open.
 
 ### 4. The BrainConnect rename keeps `brain_*` MCP tools and the `~/.wiki-brain/` data dir
 

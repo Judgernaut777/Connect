@@ -3,8 +3,12 @@
 How the Connect products interact. Diagrams are rendered with Mermaid.
 
 Throughout, **solid arrows are paths exercised in code over a real transport this cycle.**
-Dashed arrows are bindings that exist but were exercised only at an API surface, or that are
-wired programmatically without a declaration surface. That distinction is load-bearing.
+Dashed arrows are bindings that exist but were exercised only at an API surface, or whose fuller
+promise (e.g. heterogeneous compute) is not yet proven. That distinction is load-bearing. Since
+the Phase-5 diagrams, two former dashed edges are now solid: the ToolConnect governor ships in
+`agentconnect-core` and is env-wired (`AGENTCONNECT_TOOLCONNECT_URL`), and ComputeConnect
+registration is declarative (`AGENTCONNECT_COMPUTE_URL`). The whole four-service stack now runs
+from [deploy/](deploy/) and passes a cross-product smoke; see [deploy/README.md](deploy/README.md).
 
 ---
 
@@ -38,9 +42,11 @@ Cross-product surface is expressed as an interface in `agentconnect-core`, never
   `HttpLocalComputeProvider` as the shipped client. ComputeConnect is the engine-side manager that
   conforms to it, carrying amendments CA-1 (privacy default-deny) and CA-3 (`run_id` identity).
 
-There is **no shared interface for tool governance.** ToolConnect defines its own HTTP surface,
-documented in its `docs/SERVICE.md` and pinned by `docs/AGENTCONNECT_CONTRACT.md`. AgentConnect
-does not yet ship a client for it.
+Tool governance has **no shared `agentconnect-core` interface** — ToolConnect defines its own HTTP
+surface (`docs/SERVICE.md`, pinned by `docs/AGENTCONNECT_CONTRACT.md`). AgentConnect **now ships a
+first-class client**: `agentconnect-core`'s fail-closed `ToolConnectGovernor`, bound via
+`AGENTCONNECT_TOOLCONNECT_URL`. Verified this cycle end-to-end (allow read / deny write, contract
+`1.0`, subtask blocked before worker spawn).
 
 There is no shared package and no monorepo. Separate repositories, explicit interfaces.
 
@@ -171,17 +177,19 @@ Verified in Scenario 3: health and inventory, local estimate, cloud-only refused
 when `repo_sensitive`, cloud-only placed only for `public`, a real generation run, and a streamed
 1024-token run **cancelled mid-stream** (`finish_reason=cancelled`).
 
-### AgentConnect + ToolConnect ⚠️ API-level only
+### AgentConnect + ToolConnect ✅ shipped fail-closed governor
 
 ```mermaid
 flowchart TD
-    caller["caller<br/>(AgentConnect-side)"] -.->|"POST /authorize"| tc["toolconnect serve :8095"]
-    caller -.->|"then invokes directly"| tool["MCP tool"]
-    caller -.->|"POST /decisions/{id}/outcome"| tc
+    gov["AgentConnect ToolConnectGovernor<br/>(agentconnect-core)"] -->|"POST /authorize"| tc["toolconnect serve :8095"]
+    gov -->|"deny ⇒ subtask blocked before worker spawns"| block["(no run, no artifact)"]
+    gov -->|"POST /decisions/{id}/outcome"| tc
 ```
 
-Drawn dashed because the binding was exercised at ToolConnect's decision API, **not** through a
-shipped AgentConnect client. Verified in Scenario 4: real MCP stdio ingest of a three-tool server,
+Now solid: `agentconnect-core` ships the `ToolConnectGovernor`, env-wired via
+`AGENTCONNECT_TOOLCONNECT_URL`, consulted as a real chokepoint and fail-closed. Verified this cycle
+(allow read / deny write, contract `1.0`, subtask blocked before spawn); originally exercised at
+ToolConnect's decision API in Scenario 4: Verified in Scenario 4: real MCP stdio ingest of a three-tool server,
 authorize-denies-before-assertion then permit/forbid after, fail-closed on a duplicate identity and
 on post-assertion drift (invocability revoked), and a verifiable audit chain. What is missing is a
 first-class AgentConnect ToolConnect client.
@@ -220,10 +228,12 @@ What Scenario 5 actually proved, honestly:
 - **AgentConnect → ComputeConnect.** A subtask was placed on the real `qwen3-30b-a3b` engine via a
   local-manager worker, with route explanation and worker output recorded in the ledger. Solid —
   but the *cloud alternative it could route to is simulated*, so heterogeneity is still unproven.
-- **Caller → ToolConnect.** A decision was issued (`allow`) and its outcome recorded. Dashed,
-  because the caller wired ToolConnect's API directly rather than through an AgentConnect client.
+- **AgentConnect → ToolConnect.** Now via the shipped fail-closed `ToolConnectGovernor`
+  (`AGENTCONNECT_TOOLCONNECT_URL`): a read tool allowed, a write tool denied, contract `1.0`, and a
+  denied tool blocks the subtask before its worker spawns. Solid.
 - The whole thing ran inside a managed session, the audit **passed**, and the operator — not the
   agent — marked the task `succeeded`.
 
-The dashed edges become solid when a shipped AgentConnect ToolConnect client exists and when a
-real second compute provider replaces the simulated one.
+One dashed edge remains: heterogeneous compute — it becomes solid only when a real second compute
+provider replaces the simulated one. The four-service stack is now reproducible from
+[deploy/](deploy/) (`docker compose up` → `connect-health` → `connect-smoke`, 6/6).

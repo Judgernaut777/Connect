@@ -177,8 +177,10 @@ between them buys you.
 
 **Start with one.** Every product is useful alone. Reach for a combined install only when you
 specifically want the seam between two of them — and read [COMPATIBILITY.md](COMPATIBILITY.md)
-and [COMBINED_INSTALL.md](COMBINED_INSTALL.md) first, because the combined install has one real
-caveat (the PyPI name `brainconnect` is taken, so BrainConnect must be installed by path).
+and [COMBINED_INSTALL.md](COMBINED_INSTALL.md) first. All four install into one virtualenv with
+zero dependency conflicts (verified: 86 packages, `pip check` clean), and the four-service stack
+also ships as a Docker Compose deployment under [deploy/](deploy/) that builds, comes up healthy,
+and passes a real cross-product smoke test.
 
 ---
 
@@ -192,7 +194,8 @@ caveat (the PyPI name `brainconnect` is taken, so BrainConnect must be installed
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | How the products interact, with deployment diagrams |
 | **[COMPATIBILITY.md](COMPATIBILITY.md)** | 0.1.0 version matrix, Python floors, port registry, contracts, known gaps |
 | **[CONTRIBUTING.md](CONTRIBUTING.md)** | What belongs in this repository and what does not |
-| **[docs/](docs/)** | Longer-form documents |
+| **[deploy/](deploy/)** | Docker Compose full-stack deployment, `connect-health`, `connect-smoke` |
+| **[docs/](docs/)** | Longer-form guides: observability, upgrade/rollback, backup/restore, security, production checklist, troubleshooting |
 
 ## Licensing
 
@@ -214,17 +217,25 @@ Read this before depending on anything here. The honest, per-product state:
 - **ToolConnect — MVP service.** Runtime is real; still no tool execution by design, and the
   protocol-neutral claim is only partially proven.
 
-Ecosystem-level gaps, stated plainly:
+Ecosystem-level status, stated plainly:
 
-- **PyPI name collision (release blocker for publication).** `brainconnect` is already taken
-  on PyPI by an unrelated package. BrainConnect **cannot** be `pip install`-ed by that name
-  from PyPI; a combined install must use the wheel path or `--no-index`. Publishing under this
-  name is impossible without a rename or a namespace/scope.
-- **AgentConnect ↔ ToolConnect is API-level only.** The decision API is proven, but there is
-  no shipped AgentConnect-side ToolConnect client. The binding was exercised at the API, not
-  through a first-class AgentConnect integration.
-- **Registering ComputeConnect as an AgentConnect routing worker is programmatic.** It works in
-  code; there is no environment-variable or YAML declaration surface for it yet.
+- **PyPI name — RESOLVED.** BrainConnect publishes as the distribution **`brainconnect-ai`**
+  (`pip install brainconnect-ai`); the import package and console command stay `brainconnect`.
+  The old `brainconnect` collision is no longer a publication blocker. Do **not** `pip install
+  brainconnect` bare — that is an unrelated third-party package.
+- **AgentConnect ↔ ToolConnect — first-class client shipped.** `agentconnect-core` now carries a
+  fail-closed `ToolConnectGovernor` that AgentConnect consults as a real chokepoint (a denied tool
+  blocks a subtask before its worker spawns). Verified end-to-end against a live `toolconnect serve`
+  (allow a read tool, deny a write tool, contract `1.0`).
+- **ComputeConnect wiring — declarative.** Registering ComputeConnect as an AgentConnect worker is
+  now driven by `AGENTCONNECT_COMPUTE_URL` (or `config/compute.yaml`); the `local-manager` worker
+  appears in `GET /health` when configured. Verified in the Compose stack.
+
+The one honest deploy-layer caveat found while building [deploy/](deploy/): `agentconnect-core`
+lazily imports **httpx** for all three of its HTTP clients but does not declare it as a
+dependency, so a base `agentconnect-api` install cannot reach the sibling services until `httpx`
+is present. The Compose image installs it explicitly; a combined venv gets it transitively via
+ComputeConnect. Reported upstream.
 
 Three low-severity security hardening notes are recorded in
 [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps). The independent security review found **no
