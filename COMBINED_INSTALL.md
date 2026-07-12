@@ -42,8 +42,21 @@ cd BrainConnect
 cp config.example.toml config.toml
 python3 -m venv .venv
 .venv/bin/python -m pip install -e .        # installs `brainconnect` + `brainconnect-librarian`
+
+# Pick where the ledger lives BEFORE `init` — see the warning below:
+export BRAINCONNECT_DB="$HOME/connect-data/brainconnect/wiki.db"
 .venv/bin/brainconnect init                  # create the DB and scaffold dirs
 ```
+
+> **Set the DB path before `init`.** With `config.toml` copied straight from the
+> example, `brainconnect init` targets **`~/.wiki-brain/wiki.db`** by default — the
+> conventional path for a *personal* BrainConnect ledger. If you already run
+> BrainConnect for yourself, running `init` unguarded opens (and migrates forward)
+> that existing personal ledger. Point a fresh install at its own store first: either
+> `export BRAINCONNECT_DB=/path/to/ledger.db` (it overrides `config.toml` and is the
+> safe choice for tests, scripts, and any second install) or edit the `[paths] db`
+> line in `config.toml`. Opening any repo runs forward migrations on whatever this
+> resolves to, so choose it before the first command touches a DB.
 
 ### ComputeConnect
 
@@ -81,7 +94,11 @@ principle, and it keeps BrainConnect's zero-model guarantee clean).
 BrainConnect now ships an HTTP server, so the memory adapter has something real to talk to.
 
 ```bash
-# In the BrainConnect venv — serve the ledger with a bearer token:
+# In the BrainConnect venv — serve the ledger with a bearer token. Point
+# BRAINCONNECT_DB at the ledger you initialised for this product; do NOT let it
+# fall back to the personal default (~/.wiki-brain/wiki.db). See the standalone
+# BrainConnect note above.
+export BRAINCONNECT_DB="$HOME/connect-data/brainconnect/wiki.db"
 .venv/bin/brainconnect serve --port 8787 --token "$BC_TOKEN"
 
 # In the AgentConnect environment — setting BRAINCONNECT_URL both selects and enables
@@ -90,9 +107,20 @@ export BRAINCONNECT_URL="http://localhost:8787"
 export BRAINCONNECT_TOKEN="$BC_TOKEN"
 ```
 
-Verified: with those two variables set, `agentconnect-api`'s `GET /health` reports
-`"memory_backend":"brainconnect"`, and an AgentConnect `POST /memory/recall` returns a
-human-promoted claim fetched from BrainConnect over HTTP.
+`BRAINCONNECT_URL` is all it takes. AgentConnect no longer ships an active
+`config/memory.yaml` — that file is now `config/memory.yaml.example` and is **not**
+auto-loaded — so running `agentconnect-api` from a checkout no longer forces a
+`wikibrain` backend or silently overrides your `BRAINCONNECT_URL`. If you prefer to
+configure memory from a YAML file instead of the environment, copy the example and
+point `AGENTCONNECT_MEMORY_CONFIG` at your copy (`export
+AGENTCONNECT_MEMORY_CONFIG=/path/to/memory.yaml`); env still wins over the file.
+
+Verified (2026-07-12, over the real HTTP transport, scratch ledger): with just
+`BRAINCONNECT_URL`/`BRAINCONNECT_TOKEN` set, `agentconnect-api`'s `GET /health` reports
+`"memory_backend":"brainconnect"`. A `POST /memory/capture` files a `pending` candidate
+in BrainConnect over HTTP; after a human `POST /memory/promote` (operator token, with
+`confidence` + `scope`), a `POST /memory/recall` returns that now-trusted claim
+(`"trusted":true`, `"role":"trusted_authority"`) fetched from BrainConnect over HTTP.
 
 The trust gradient is one-way by design: workers may **capture** (write-only), only a manager may
 **recall**, and re-injection flows through AgentConnect's classify-and-redact pass. Promotion is
@@ -157,16 +185,27 @@ single Python 3.11+ virtual environment with zero dependency conflicts** and ele
 console scripts. Separate venvs are still the recommended default; a single combined venv is a
 verified, supported option when you want one environment.
 
-The only non-obvious step is BrainConnect, which must come from its wheel (PyPI name collision):
+The one non-obvious step is AgentConnect: its **root** `pyproject.toml` is dev-tooling
+only (no `[build-system]`/`[project]`), and a flat-layout build from the repo root errors
+on `config/` and `packages/`. AgentConnect's nine distributions each live under
+`packages/agentconnect-*` and are built **per package**. The other three products are
+single-package repos and build from their checkout root.
 
 ```bash
-# 1. Build a wheel for each product from its checkout:
+# 1. Build all twelve wheels into one wheelhouse:
 python3 -m venv .buildenv && source .buildenv/bin/activate && pip install build
+WHEELHOUSE="$PWD/wheelhouse"; mkdir -p "$WHEELHOUSE"
 
-for repo in AgentConnect BrainConnect ComputeConnect ToolConnect; do
-  ( cd "$repo" && python -m build --wheel --outdir ../wheelhouse )
+# AgentConnect — nine wheels, one per package under packages/agentconnect-*:
+for pkg in AgentConnect/packages/agentconnect-*; do
+  ( cd "$pkg" && python -m build --wheel --outdir "$WHEELHOUSE" )
 done
-# AgentConnect is nine wheels; the other three are one each — twelve in total.
+
+# The other three — one wheel each, built from the repo root:
+for repo in BrainConnect ComputeConnect ToolConnect; do
+  ( cd "$repo" && python -m build --wheel --outdir "$WHEELHOUSE" )
+done
+# Nine AgentConnect wheels + three = twelve. Confirm: `ls "$WHEELHOUSE"/*.whl | wc -l` → 12.
 deactivate
 
 # 2. Install everything into one fresh venv from the wheelhouse:
