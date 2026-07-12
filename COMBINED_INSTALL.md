@@ -5,10 +5,12 @@ Running more than one Connect product together. All four products are installabl
 Read [COMPATIBILITY.md](COMPATIBILITY.md) alongside this — especially the Python floor (3.11 for
 a single-venv install), the port registry, and the one real caveat below.
 
-> **The one caveat that will bite you: `brainconnect` is taken on PyPI.** An unrelated package
-> owns that name. Install BrainConnect **by wheel path or from a checkout**, never by bare name.
-> Every recipe below does this. Ignore it and `pip install brainconnect` will silently fetch a
-> stranger's neuroscience library.
+> **Name note: BrainConnect's PyPI distribution is `brainconnect-ai`.** The plain `brainconnect`
+> name is owned on PyPI by an unrelated neuroscience package, so BrainConnect publishes as
+> `brainconnect-ai` — `pip install brainconnect-ai`. The **command and the import package stay
+> `brainconnect`** (a distribution may be named differently from what it imports), so every
+> `brainconnect ...` invocation below is unchanged. From a checkout, `pip install -e .` is
+> unaffected. Do **not** `pip install brainconnect` (bare) — that fetches the stranger's library.
 
 ---
 
@@ -150,17 +152,19 @@ done
 # AgentConnect is nine wheels; the other three are one each — twelve in total.
 deactivate
 
-# 2. Install everything into one fresh venv, resolving BrainConnect ONLY from the wheelhouse:
+# 2. Install everything into one fresh venv from the wheelhouse:
 python3.11 -m venv .venv && source .venv/bin/activate
-pip install --find-links ./wheelhouse ./wheelhouse/brainconnect-0.1.0-py3-none-any.whl \
-            ./wheelhouse/agentconnect_*-0.1.0-py3-none-any.whl \
-            ./wheelhouse/computeconnect-0.1.0-py3-none-any.whl \
-            ./wheelhouse/toolconnect-0.1.0-py3-none-any.whl
+pip install --find-links ./wheelhouse \
+            brainconnect-ai \
+            agentconnect-core agentconnect-cli agentconnect-api agentconnect-mcp \
+            agentconnect-linear agentconnect-router agentconnect-model-manager \
+            agentconnect-runtime agentconnect-temporal \
+            computeconnect toolconnect
 ```
 
-Passing the explicit `brainconnect-0.1.0-...whl` path guarantees the local wheel wins over the
-PyPI name. If you would rather forbid PyPI entirely, add `--no-index` and rely solely on
-`--find-links ./wheelhouse` (you then also need the dependency wheels available locally).
+BrainConnect resolves by its distribution name `brainconnect-ai`, which is unambiguous on PyPI
+(the bare `brainconnect` belongs to an unrelated project). To forbid PyPI entirely for an
+air-gapped build, add `--no-index` and provide every dependency wheel under `./wheelhouse`.
 
 Verify the eleven console scripts coexist:
 
