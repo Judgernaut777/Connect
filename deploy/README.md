@@ -135,13 +135,11 @@ ToolConnect's decision API to show allow/deny; the AgentConnect **governor** pat
 blocks a subtask before its worker spawns is proven separately by
 `mcp-agentconnect/examples/demo_governor_chokepoint.py`.
 
-## The one deploy-layer workaround
+## Deploy-layer workarounds
 
-The AgentConnect image installs `httpx` explicitly. `agentconnect-core` lazily imports
-`httpx` in its memory, compute and ToolConnect clients but declares only `pydantic` +
-`pyyaml`, so a base `agentconnect-api` install cannot reach the sibling services without it.
-A combined venv gets `httpx` transitively from ComputeConnect; an isolated AC image does
-not. Reported upstream — the fix is to add `httpx>=0.27` to `agentconnect-core`'s deps.
+None. An earlier build added `httpx` explicitly because `agentconnect-core` lazily imported
+it without declaring it; that dependency is now declared (`httpx>=0.27`) upstream, so the
+image installs the products with no extra pins.
 
 ## Cleanup
 

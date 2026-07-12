@@ -22,16 +22,10 @@ COPY packages/agentconnect-api  /src/agentconnect-api
 COPY packages/agentconnect-cli  /src/agentconnect-cli
 
 # Install core first so the api's `agentconnect-core==0.1.0` pin resolves locally.
-#
-# httpx is added explicitly: agentconnect-core's three HTTP clients (memory adapter,
-# ComputeConnect provider, ToolConnect governor) all `import httpx` lazily, but the
-# package declares only pydantic + pyyaml — so a base `agentconnect-api` install
-# cannot reach BrainConnect/ComputeConnect/ToolConnect over the network without it.
-# (In a combined venv this is masked because ComputeConnect depends on httpx.)
-# Deploy-layer workaround for a missing runtime dependency in agentconnect-core;
-# reported upstream. Pin matches ComputeConnect's floor (httpx>=0.27).
+# agentconnect-core declares httpx>=0.27 (its memory/compute/ToolConnect clients need
+# it), so a base install reaches the sibling services without any extra pin here.
 RUN pip install /src/agentconnect-core \
- && pip install /src/agentconnect-api /src/agentconnect-cli "httpx>=0.27"
+ && pip install /src/agentconnect-api /src/agentconnect-cli
 
 RUN mkdir -p /data/artifacts
 ENV AGENTCONNECT_DB_PATH=/data/agentconnect.db \
