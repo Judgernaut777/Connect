@@ -2,9 +2,9 @@
 
 Longer-form ecosystem documents that do not belong in a top-level file.
 
-**This directory is currently empty of content.** It exists because the top-level documents
-are deliberately short, and material that outgrows them lands here rather than bloating the
-front door.
+It exists because the top-level documents are deliberately short, and material that outgrows
+them lands here rather than bloating the front door. One document lives here today:
+[RELEASE.md](RELEASE.md), the manifest-driven release model.
 
 ## What belongs here
 

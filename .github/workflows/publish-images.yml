@@ -1,0 +1,126 @@
+name: Publish images
+
+# Builds the four deploy/*.Dockerfile images from the commits pinned in
+# manifest/ecosystem.yaml and pushes them to GHCR when a release tag is
+# pushed to this repository. Each image is built from the sibling product's
+# checkout at exactly the commit the manifest records for that release --
+# not from whatever happens to be on a branch tip at build time.
+#
+# NOTE: this workflow was authored and YAML-validated (python3 -c "import
+# yaml; yaml.safe_load(...)") in the environment that wrote it, but has not
+# actually been executed by GitHub Actions. Image publishing specifically
+# requires the sibling repositories (AgentConnect, BrainConnect,
+# ComputeConnect, ToolConnect) to be checked out as Docker build contexts at
+# workflow run time -- the checkout steps below reproduce the same sibling
+# layout deploy/docker-compose.yml assumes locally (see deploy/README.md).
+# It also requires the sibling repos to be public/clonable by the token this
+# workflow runs with, same caveat as ecosystem-ci.yml.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: build + push images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Connect (manifest + Dockerfiles)
+        uses: actions/checkout@v4
+        with:
+          path: Connect
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve pinned commits from manifest
+        id: pins
+        working-directory: Connect
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import sys
+          sys.path.insert(0, "scripts")
+          import _manifest_yaml as my
+
+          manifest = my.load(open("manifest/ecosystem.yaml").read())
+          products = manifest["products"]
+          for key in ("agentconnect", "brainconnect", "computeconnect", "toolconnect"):
+              print(f"{key}_commit={products[key]['commit']}")
+          PY
+
+      - name: Checkout AgentConnect at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: Judgernaut777/AgentConnect
+          ref: ${{ steps.pins.outputs.agentconnect_commit }}
+          path: mcp-agentconnect
+
+      - name: Checkout BrainConnect at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: Judgernaut777/BrainConnect
+          ref: ${{ steps.pins.outputs.brainconnect_commit }}
+          path: WikiBrain
+
+      - name: Checkout ComputeConnect at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: Judgernaut777/ComputeConnect
+          ref: ${{ steps.pins.outputs.computeconnect_commit }}
+          path: ComputeConnect
+
+      - name: Checkout ToolConnect at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: Judgernaut777/ToolConnect
+          ref: ${{ steps.pins.outputs.toolconnect_commit }}
+          path: ToolConnect
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build + push agentconnect image
+        uses: docker/build-push-action@v6
+        with:
+          context: mcp-agentconnect
+          file: Connect/deploy/agentconnect.Dockerfile
+          push: true
+          tags: ghcr.io/judgernaut777/connect-agentconnect:${{ github.ref_name }}
+
+      - name: Build + push brainconnect image
+        uses: docker/build-push-action@v6
+        with:
+          context: WikiBrain
+          file: Connect/deploy/brainconnect.Dockerfile
+          push: true
+          tags: ghcr.io/judgernaut777/connect-brainconnect:${{ github.ref_name }}
+
+      - name: Build + push computeconnect image
+        uses: docker/build-push-action@v6
+        with:
+          context: ComputeConnect
+          file: Connect/deploy/computeconnect.Dockerfile
+          push: true
+          tags: ghcr.io/judgernaut777/connect-computeconnect:${{ github.ref_name }}
+
+      - name: Build + push toolconnect image
+        uses: docker/build-push-action@v6
+        with:
+          context: ToolConnect
+          file: Connect/deploy/toolconnect.Dockerfile
+          push: true
+          tags: ghcr.io/judgernaut777/connect-toolconnect:${{ github.ref_name }}

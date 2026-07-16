@@ -2,10 +2,14 @@
 
 **The Connect ecosystem is a self-hosted, privacy-first stack for running coding agents you can audit.**
 
-This repository is documentation only. It contains no libraries, packages, services, or
-APIs. It exists to explain how the products fit together, and to be the single place a new
-user starts. Each product repository remains the authority on installing, configuring, and
-using that specific product.
+This repository ships no application or library code — no importable package, no service, no
+API. What it does ship: the [ecosystem manifest](manifest/ecosystem.yaml) (the pinned-commit
+lockfile and source of truth for every version and test-count number in this document), a
+Docker Compose deployment bundle under [deploy/](deploy/), and a handful of operational
+scripts ([scripts/](scripts/), `deploy/connect-health`, `deploy/connect-smoke`). It exists to
+explain how the products fit together, to keep that explanation honest and un-driftable, and
+to be the single place a new user starts. Each product repository remains the authority on
+installing, configuring, and using that specific product.
 
 Every product works independently. None requires another to be useful.
 
@@ -22,9 +26,20 @@ are minimum-viable but real, with limitations named below rather than smoothed o
 | **ToolConnect** | 0.1.0 | MVP service | Tool-governance decision point | [ToolConnect](https://github.com/Judgernaut777/ToolConnect) |
 
 Every product is installable, runs standalone, and ships an Apache-2.0 `LICENSE` and `NOTICE`
-at its repository root and inside every wheel. Test gates as verified on 2026-07-12:
-AgentConnect **945 passed / 3 skipped**, BrainConnect **589 passed / 0 skipped**,
-ComputeConnect **66 passed**, ToolConnect **239 passed / 2 skipped**.
+at its repository root and inside every wheel.
+
+<!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
+Test gates, from the ecosystem manifest:
+AgentConnect **1060 passed / 3 skipped**, BrainConnect **951 passed / 0 failed**,
+ComputeConnect **129 passed** (140 collected, offline gate), ToolConnect **339 passed / 3
+skipped** (342 collected).
+
+ComputeConnect's 11 real-engine tests are excluded from that offline count — they need a live
+llama.cpp on `:8080`, and 9 of them currently fail only because the host model was renamed
+`qwen3-30b-a3b` → `qwen3.6-35b-a3b`, not because of a product bug. BrainConnect's
+`package_version` (`0.1.0`) has not yet been bumped to match its `v0.1.2-rc1` tag — recorded
+here truthfully, not smoothed over.
+<!-- END generated:tests -->
 
 "Runtime exists" does not mean "production-ready." Read
 [the maturity and known-limitations section](#maturity-and-known-limitations) before you
@@ -194,8 +209,25 @@ and passes a real cross-product smoke test.
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | How the products interact, with deployment diagrams |
 | **[COMPATIBILITY.md](COMPATIBILITY.md)** | 0.1.0 version matrix, Python floors, port registry, contracts, known gaps |
 | **[CONTRIBUTING.md](CONTRIBUTING.md)** | What belongs in this repository and what does not |
+| **[manifest/ecosystem.yaml](manifest/ecosystem.yaml)** | The ecosystem source of truth / lockfile: pinned commits, tags, package and contract versions, test gate counts |
+| **[docs/RELEASE.md](docs/RELEASE.md)** | The manifest-driven release model: how the manifest, generated doc tables, drift check, and image publishing fit together |
 | **[deploy/](deploy/)** | Docker Compose full-stack deployment, `connect-health`, `connect-smoke` |
 | **[docs/](docs/)** | Longer-form guides: observability, upgrade/rollback, backup/restore, security, production checklist, troubleshooting |
+
+## Release model
+
+This repository's product claims are generated, not hand-maintained. **[manifest/ecosystem.yaml](manifest/ecosystem.yaml)**
+is the single source of truth — pinned commit SHAs (it doubles as the ecosystem lockfile), tags,
+package versions, contract versions, and last-verified test gate counts for every product,
+including this one. The tables above are derived from it and wrapped in
+`<!-- BEGIN generated:tests --> … <!-- END generated:tests -->` markers.
+**[scripts/check_manifest.py](scripts/check_manifest.py)** parses those markers and fails
+non-zero the moment a doc number drifts from the manifest — that is what makes this document
+un-driftable rather than merely aspirational. **[scripts/gen_manifest.py](scripts/gen_manifest.py)**
+regenerates the manifest itself from each sibling checkout's live git state, optionally
+(`--run-gates`) re-running each sibling's gate to refresh test counts. Release images are built
+only from the commits the manifest pins — see **[docs/RELEASE.md](docs/RELEASE.md)** for the
+full model and **[.github/workflows/](.github/workflows/)** for the CI that enforces it.
 
 ## Licensing
 
