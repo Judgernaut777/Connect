@@ -20,9 +20,10 @@ COPY src ./src
 
 RUN pip install .
 
-RUN mkdir -p /data
-
 RUN useradd --create-home --uid 10001 appuser
+# Own /data so the non-root process can create the SQLite DB on the (root-owned by
+# default) named volume.
+RUN mkdir -p /data && chown appuser:appuser /data
 USER appuser
 
 EXPOSE 8095

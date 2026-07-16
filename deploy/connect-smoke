@@ -29,6 +29,7 @@ CC_URL="${CC_URL:-http://127.0.0.1:8990}"
 TC_URL="${TC_URL:-http://127.0.0.1:8995}"
 BC_TOKEN="${BRAINCONNECT_TOKEN:-}"
 TC_TOKEN="${TOOLCONNECT_AUTH_TOKEN:-}"
+CC_TOKEN="${COMPUTECONNECT_TOKEN:-}"
 COMPOSE="${COMPOSE:-docker compose}"
 CT="Content-Type: application/json"
 
@@ -90,7 +91,8 @@ if [ "$A" = "True" ] && [ "$D" = "False" ]; then ok "read allowed, write denied 
 
 # --- 5. AgentConnect places on ComputeConnect --------------------------------------
 echo "[5] placement decision from ComputeConnect"
-EST=$(curl -fsS -X POST "$CC_URL/route/estimate" -H "$CT" -d '{"prompt":"health check","max_tokens":16}')
+ccauth=(); [ -n "$CC_TOKEN" ] && ccauth=(-H "Authorization: Bearer $CC_TOKEN")
+EST=$(curl -fsS -X POST "$CC_URL/route/estimate" "${ccauth[@]}" -H "$CT" -d '{"prompt":"health check","max_tokens":16}')
 ELIG=$(printf '%s' "$EST" | jq "d.get('eligible')")
 SEL=$(printf '%s' "$EST" | jq "d.get('selected_model')")
 RCODE=$(printf '%s' "$EST" | jq "(d.get('reason') or {}).get('code','ok')")
