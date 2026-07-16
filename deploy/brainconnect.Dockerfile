@@ -21,15 +21,18 @@ COPY cli ./cli
 # Installs the `brainconnect` (zero-model CLI) and `brainconnect-librarian` scripts.
 RUN pip install .
 
-RUN mkdir -p /data
 # BRAINCONNECT_DB points the ledger at a scratch volume path, never the host's
 # real ~/.wiki-brain/wiki.db. `serve` requires the DB to exist, so init-if-absent.
 ENV BRAINCONNECT_DB=/data/brain.db
 
+# Create the runtime user first, then own /data so the non-root process can write
+# the ledger + repo scaffolding on the (root-owned by default) named volume.
 RUN useradd --create-home --uid 10001 appuser
+RUN mkdir -p /data && chown appuser:appuser /data
 USER appuser
 
 EXPOSE 8787
 # init the ledger on first boot (idempotent), then serve on all interfaces so the
-# other compose services can reach it. Token comes from BRAINCONNECT_TOKEN.
-CMD ["sh", "-c", "test -f \"$BRAINCONNECT_DB\" || brainconnect init; exec brainconnect serve --host 0.0.0.0 --port 8787 --token \"$BRAINCONNECT_TOKEN\""]
+# other compose services can reach it. Run from /data (writable volume) because the
+# root filesystem is read-only and `init` writes repo scaffolding into the cwd.
+CMD ["sh", "-c", "cd /data && { test -f \"$BRAINCONNECT_DB\" || brainconnect init; } && exec brainconnect serve --host 0.0.0.0 --port 8787 --token \"$BRAINCONNECT_TOKEN\""]
