@@ -33,5 +33,8 @@ ENV AGENTCONNECT_DB_PATH=/data/agentconnect.db \
     AGENTCONNECT_API_HOST=0.0.0.0 \
     AGENTCONNECT_API_PORT=8790
 
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
+
 EXPOSE 8790
 CMD ["agentconnect-api"]

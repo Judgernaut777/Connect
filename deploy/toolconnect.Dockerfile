@@ -21,6 +21,10 @@ COPY src ./src
 RUN pip install .
 
 RUN mkdir -p /data
+
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
+
 EXPOSE 8095
 # Policy is mounted at /etc/toolconnect/policy.cedar (see docker-compose.yml).
 CMD ["sh", "-c", "exec toolconnect serve --db /data/toolconnect.db --policies /etc/toolconnect/policy.cedar --host 0.0.0.0 --port 8095"]

@@ -25,5 +25,8 @@ RUN pip install .
 # Default upstream; overridden by COMPUTECONNECT_UPSTREAM in the environment.
 ENV COMPUTECONNECT_UPSTREAM=http://host.docker.internal:8080
 
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
+
 EXPOSE 8090
 CMD ["sh", "-c", "exec computeconnect serve --host 0.0.0.0 --port 8090 --upstream \"$COMPUTECONNECT_UPSTREAM\""]
