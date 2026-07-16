@@ -27,7 +27,15 @@ services:
     volumes:
       - brainconnect-data:/data
     ports:
-      - "8887:8787"
+      - "127.0.0.1:8887:8787"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8787/health',timeout=3).read()"]
       interval: 10s
@@ -47,7 +55,15 @@ services:
       - toolconnect-data:/data
       - ./policies.cedar:/etc/toolconnect/policy.cedar:ro
     ports:
-      - "8995:8095"
+      - "127.0.0.1:8995:8095"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
     healthcheck:
       test: ["CMD", "python", "-c", "import os,urllib.request;r=urllib.request.Request('http://localhost:8095/health',headers={'Authorization':'Bearer '+os.environ['TOOLCONNECT_AUTH_TOKEN']});urllib.request.urlopen(r,timeout=3).read()"]
       interval: 10s
@@ -63,12 +79,21 @@ services:
     image: connect/computeconnect:0.1.0
     environment:
       COMPUTECONNECT_UPSTREAM: ${COMPUTECONNECT_UPSTREAM:-http://host.docker.internal:8080}
+      COMPUTECONNECT_TOKEN: ${COMPUTECONNECT_TOKEN:-}
     extra_hosts:
       # Lets the container reach a host-run engine on Linux. If that engine binds the
       # host loopback only, it stays unreachable and ComputeConnect reports "degraded".
       - "host.docker.internal:host-gateway"
     ports:
-      - "8990:8090"
+      - "127.0.0.1:8990:8090"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
     healthcheck:
       # /health returns 200 even when degraded (the JSON `status` field carries the
       # degraded/down detail), so this proves the control plane is up, not that a
@@ -95,7 +120,11 @@ services:
       BRAINCONNECT_TOKEN: ${BRAINCONNECT_TOKEN:?set BRAINCONNECT_TOKEN in .env}
       # Compute: registers the local-manager worker pointed at ComputeConnect.
       AGENTCONNECT_COMPUTE_URL: http://computeconnect:8090
-      # Tool governance: binds the fail-closed ToolConnect governor.
+      # bootstrap.py reads AGENTCONNECT_COMPUTE_TOKEN and sends it verbatim as the
+      # Authorization header, so the value must carry the "Bearer " prefix that
+      # ComputeConnect's middleware expects. Empty -> no header (loopback dev).
+      AGENTCONNECT_COMPUTE_TOKEN: ${COMPUTECONNECT_TOKEN:+Bearer ${COMPUTECONNECT_TOKEN}}
+      # Tool governance: ToolConnect governor is fail-closed in code: any deny OR outage blocks the subtask, regardless of this mode value (the advisory/required label is currently informational only).
       AGENTCONNECT_TOOLCONNECT_URL: http://toolconnect:8095
       AGENTCONNECT_TOOLCONNECT_TOKEN: ${TOOLCONNECT_AUTH_TOKEN:?set TOOLCONNECT_AUTH_TOKEN in .env}
       AGENTCONNECT_TOOLCONNECT_MODE: ${AGENTCONNECT_TOOLCONNECT_MODE:-advisory}
@@ -103,7 +132,15 @@ services:
     volumes:
       - agentconnect-data:/data
     ports:
-      - "8890:8790"
+      - "127.0.0.1:8890:8790"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
     depends_on:
       brainconnect:
         condition: service_healthy

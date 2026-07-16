@@ -26,6 +26,9 @@ RUN mkdir -p /data
 # real ~/.wiki-brain/wiki.db. `serve` requires the DB to exist, so init-if-absent.
 ENV BRAINCONNECT_DB=/data/brain.db
 
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
+
 EXPOSE 8787
 # init the ledger on first boot (idempotent), then serve on all interfaces so the
 # other compose services can reach it. Token comes from BRAINCONNECT_TOKEN.
