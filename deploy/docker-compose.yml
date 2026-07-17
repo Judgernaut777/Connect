@@ -126,7 +126,10 @@ services:
       AGENTCONNECT_COMPUTE_TOKEN: ${COMPUTECONNECT_TOKEN:+Bearer ${COMPUTECONNECT_TOKEN}}
       # Tool governance: ToolConnect governor is fail-closed in code: any deny OR outage blocks the subtask, regardless of this mode value (the advisory/required label is currently informational only).
       AGENTCONNECT_TOOLCONNECT_URL: http://toolconnect:8095
-      AGENTCONNECT_TOOLCONNECT_TOKEN: ${TOOLCONNECT_AUTH_TOKEN:?set TOOLCONNECT_AUTH_TOKEN in .env}
+      # The governor client sends this header verbatim; ToolConnect requires the
+      # "Bearer " scheme (unlike BrainConnect, which also accepts a bare token), so
+      # the prefix must be baked in here (mirrors AGENTCONNECT_COMPUTE_TOKEN above).
+      AGENTCONNECT_TOOLCONNECT_TOKEN: "Bearer ${TOOLCONNECT_AUTH_TOKEN:?set TOOLCONNECT_AUTH_TOKEN in .env}"
       AGENTCONNECT_TOOLCONNECT_MODE: ${AGENTCONNECT_TOOLCONNECT_MODE:-advisory}
       AGENTCONNECT_WORKERS: echo
     volumes:

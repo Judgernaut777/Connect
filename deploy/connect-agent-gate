@@ -1,0 +1,423 @@
+#!/usr/bin/env bash
+# connect-agent-gate — proves REAL agent work, not just wiring.
+#
+# connect-smoke proves the four Connect services are wired together (one call each).
+# It does NOT prove that AgentConnect ever dispatches a *managed subtask* to a real
+# compute-backed worker, and it does NOT prove the AgentConnect -> ToolConnect
+# *governor* chokepoint (ADR 0008) is really consulted on that path. This script does
+# both, against the ALREADY-RUNNING composed stack (`docker compose -p connect`):
+#
+#   [1] SETUP        register the local-manager worker's declared tools (generate,
+#                     write_artifact) in ToolConnect under its real harness
+#                     (`local_model_manager`), then widen deploy/policies.cedar with a
+#                     deliberate, clearly-commented permit so the governor CAN allow
+#                     them (the shipped policy only permits read-effect tools). The
+#                     original read-only permit is left untouched. Restarts ONLY the
+#                     `toolconnect` compose service to pick up the new policy file.
+#   [2] REAL WORK     create a task, submit a subtask with a real one-sentence prompt,
+#                     routed (by capability match, not by mocking) to AgentConnect's
+#                     auto-registered `local-manager` worker
+#                     (LocalModelManagerWorkerAdapter -> ComputeConnect -> the host
+#                     model). Wait for a terminal status, fetch the result artifact's
+#                     actual content, and print the real generated text.
+#   [3] GOVERNOR      submit a second subtask on the identical path and confirm the
+#       CHOKEPOINT    worker never ran when the governor didn't (or couldn't) allow it:
+#                     0 runs, no result artifact, ledger status `failed` — the
+#                     structural guarantee the ADR 0008 chokepoint makes, regardless of
+#                     whether the block is a Cedar policy deny or a fail-closed outage
+#                     deny (the contract's own language: "a missing decision is a
+#                     denial").
+#   [4] AUXILIARY     run mcp-agentconnect's own isolated governor demo
+#                     (examples/demo_governor_chokepoint.py) against a throwaway
+#                     ToolConnect, which independently proves the CODE supports a real
+#                     ALLOWED decision (with a live decision_id), a real FORBIDDEN
+#                     deny, and a real FAIL-CLOSED outage deny. This bounds any
+#                     surprise in [2]/[3] to *this deployment's wiring*, never the
+#                     governor mechanism itself.
+#
+# Never restarts/modifies AgentConnect, ComputeConnect, or BrainConnect, and never
+# touches the host llama engine. The only mutations this script makes are: ToolConnect
+# catalog upserts (via its own HTTP API), an additive edit to deploy/policies.cedar,
+# and `docker compose restart toolconnect`.
+#
+# Idempotent: every task/subtask gets a fresh id (RUN_ID suffix); ToolConnect
+# registration calls are upserts and safe to repeat; the policy widen is skipped if
+# already present.
+#
+#   ./connect-agent-gate
+set -u
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$HERE/.env" ] && set -a && . "$HERE/.env" && set +a
+cd "$HERE"
+
+AC_URL="${AC_URL:-http://127.0.0.1:8890}"
+TC_URL="${TC_URL:-http://127.0.0.1:8995}"
+TC_TOKEN="${TOOLCONNECT_AUTH_TOKEN:-}"
+COMPOSE="${COMPOSE:-docker compose}"
+CT="Content-Type: application/json"
+RUN_ID="$(date +%s)-$$"
+SRC="local_model_manager"          # the real worker's harness == the ToolConnect source
+
+pass=0; fail=0
+ok()   { echo "  PASS $1"; pass=$((pass+1)); }
+bad()  { echo "  FAIL $1"; fail=$((fail+1)); }
+note() { echo "       $1"; }
+jqd()  { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null; }
+
+echo "== Connect real-agent-work gate (run $RUN_ID) =="
+echo "   headline: a real subtask, routed to the real local-manager compute worker,"
+echo "   generating real text on the host model through ComputeConnect, gated by the"
+echo "   real AgentConnect -> ToolConnect governor chokepoint."
+echo
+
+# ------------------------------------------------------------------------------- [0]
+echo "[0] mint AgentConnect operator token"
+TOK=$($COMPOSE exec -T agentconnect agentconnect tokens issue --actor "connect-agent-gate-$RUN_ID" 2>/dev/null | jqd "d['token']")
+if [ -n "${TOK:-}" ]; then ok "minted operator token"; else
+  bad "could not mint operator token"; echo "SUMMARY pass=$pass fail=$fail"; exit 1
+fi
+AAUTH=(-H "Authorization: Bearer $TOK")
+TCAUTH=(-H "Authorization: Bearer $TC_TOKEN")
+
+# ------------------------------------------------------------------------------- [1]
+echo "[1] SETUP: register the local-manager worker's tools in ToolConnect + widen the governor policy"
+
+curl -fsS -X POST "$TC_URL/sources" "${TCAUTH[@]}" -H "$CT" \
+  -d "{\"source_id\":\"$SRC\",\"tier\":\"known\",\"transport\":\"push\",\"declares\":[\"generate\",\"write_artifact\"]}" >/dev/null
+curl -fsS -X POST "$TC_URL/sources/$SRC/tools" "${TCAUTH[@]}" -H "$CT" \
+  -d '{"tools":[{"name":"generate"},{"name":"write_artifact"}]}' >/dev/null
+# Asserted (operator-reviewed) descriptor, not a server claim: `generate` calls out to
+# the model and `write_artifact` persists its output — both are honestly WRITE-effect,
+# non-idempotent, non-sensitive, non-external-sink actions.
+curl -fsS -X POST "$TC_URL/assertions" "${TCAUTH[@]}" -H "$CT" \
+  -d "{\"source_id\":\"$SRC\",\"name\":\"generate\",\"descriptor\":{\"effect\":\"write\",\"reversible\":false,\"asserted_by\":\"connect-agent-gate\"}}" >/dev/null
+curl -fsS -X POST "$TC_URL/assertions" "${TCAUTH[@]}" -H "$CT" \
+  -d "{\"source_id\":\"$SRC\",\"name\":\"write_artifact\",\"descriptor\":{\"effect\":\"write\",\"reversible\":false,\"asserted_by\":\"connect-agent-gate\"}}" >/dev/null
+
+CAT=$(curl -fsS "$TC_URL/catalog" "${TCAUTH[@]}")
+ASSERTED=$(printf '%s' "$CAT" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+names={t['ref']['name'] if isinstance(t.get('ref'),dict) else t.get('name') for t in d.get('tools',[]) if t.get('source_id')=='$SRC' and t.get('asserted')}
+print('generate' in names and 'write_artifact' in names)
+" 2>/dev/null)
+if [ "$ASSERTED" = "True" ]; then
+  ok "ToolConnect knows $SRC:generate and $SRC:write_artifact (operator-asserted)"
+else
+  bad "ToolConnect catalog missing asserted $SRC tools: $CAT"
+fi
+
+MARKER="local-manager-generate-write"
+if grep -q "$MARKER" policies.cedar 2>/dev/null; then
+  note "policies.cedar already widened (marker '$MARKER' present) — skipping edit"
+else
+  cat >> policies.cedar <<'CEDAR'
+
+// --- connect-agent-gate: deliberate widening for the local-manager compute worker ---
+// The shipped policy above permits only READ-effect tools. AgentConnect's
+// auto-registered `local-manager` worker (harness `local_model_manager`) declares
+// `generate` and `write_artifact`, both honestly asserted effect=write (see
+// deploy/connect-agent-gate [1]). Without this rule the governor fail-closed-denies
+// every real-inference subtask, by design (Cedar default-deny). This permits a
+// LOCAL-privacy-tier principal to invoke a write-effect tool that is not reading
+// sensitive data and is not an external sink — i.e. local inference whose output
+// stays in the ledger. The original read-only permit above is untouched.
+@id("local-manager-generate-write")
+permit(
+    principal,
+    action == Action::"invoke",
+    resource
+) when {
+    principal.privacy_tier == "local" &&
+    resource.effect == "write" &&
+    !resource.reads_sensitive &&
+    !resource.external_sink
+};
+CEDAR
+  note "appended a marked, commented permit to policies.cedar (original rules untouched)"
+fi
+
+note "restarting toolconnect (only this service) to load the policy"
+$COMPOSE restart toolconnect >/dev/null 2>&1
+TC_UP=""
+for i in $(seq 1 30); do
+  if curl -fsS "${TCAUTH[@]}" "$TC_URL/health" >/dev/null 2>&1; then TC_UP=1; break; fi
+  sleep 1
+done
+if [ -n "$TC_UP" ]; then ok "toolconnect back up with the widened policy"; else
+  bad "toolconnect did not come back healthy after restart"; echo "SUMMARY pass=$pass fail=$fail"; exit 1
+fi
+
+# Sanity-check the Cedar layer in isolation, with OUR OWN correctly-formed bearer
+# header (`Authorization: Bearer <token>`) — proves the widened policy itself is
+# correct, independent of whatever header AgentConnect's own client happens to send.
+SANITY=$(curl -fsS -X POST "$TC_URL/authorize" "${TCAUTH[@]}" -H "$CT" \
+  -d "{\"principal\":{\"id\":\"connect-agent-gate-sanity\",\"privacy_tier\":\"local\",\"kind\":\"agent\"},\"source_id\":\"$SRC\",\"name\":\"generate\"}")
+SANITY_OK=$(printf '%s' "$SANITY" | jqd "d.get('allowed')")
+if [ "$SANITY_OK" = "True" ]; then
+  ok "widened Cedar policy permits local_model_manager:generate for a local principal (decision_id=$(printf '%s' "$SANITY" | jqd "d.get('decision_id')"))"
+else
+  bad "widened policy still denies a directly-authorized local principal: $SANITY"
+fi
+echo
+
+# ------------------------------------------------------------------------------- [2]
+echo "[2] REAL WORK: dispatch a subtask to the real compute worker, wait for real inference"
+
+BASE_SEQ=$(curl -fsS "$TC_URL/audit?limit=1" "${TCAUTH[@]}" | jqd "(d.get('records') or [{}])[0].get('seq', 0)")
+BASE_SEQ="${BASE_SEQ:-0}"
+
+TASK=$(curl -fsS -X POST "$AC_URL/tasks" "${AAUTH[@]}" -H "$CT" \
+  -d "{\"title\":\"agent-gate real work $RUN_ID\",\"goal\":\"prove real dispatch to the compute worker\"}")
+TASK_ID=$(printf '%s' "$TASK" | jqd "d['id']")
+if [ -z "${TASK_ID:-}" ]; then
+  bad "could not create task: $TASK"
+else
+  ok "created task $TASK_ID"
+  PROMPT="In one sentence, explain what a hash function is."
+  SUB=$(curl -fsS -m 180 -X POST "$AC_URL/tasks/$TASK_ID/subtasks" "${AAUTH[@]}" -H "$CT" -d "{
+    \"title\": \"real inference\",
+    \"instructions\": \"$PROMPT\",
+    \"preferred_worker\": \"local-manager\",
+    \"required_capabilities\": [\"generate\"]
+  }")
+  SUB_ID=$(printf '%s' "$SUB" | jqd "d.get('id')")
+  STATUS=$(printf '%s' "$SUB" | jqd "d.get('status')")
+  # DirectExecutionBackend (the shipped default) runs a subtask inline, so by the time
+  # POST returns it is already terminal. Poll a few times anyway in case of a
+  # different execution backend.
+  for i in $(seq 1 20); do
+    [ "$STATUS" = "succeeded" ] || [ "$STATUS" = "failed" ] || [ "$STATUS" = "cancelled" ] && break
+    sleep 3
+    SUB=$(curl -fsS "$AC_URL/subtasks/$SUB_ID" "${AAUTH[@]}")
+    STATUS=$(printf '%s' "$SUB" | jqd "d['subtask'].get('status')")
+  done
+  ROUTED=$(printf '%s' "$SUB" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+s=d.get('subtask',d)
+rr=s.get('route_reason') or {}
+print(rr.get('selected_worker'), rr.get('selected_harness'))
+" 2>/dev/null)
+  note "routed to: ${ROUTED:-unknown} (echo_worker is rejected on purpose: it lacks the 'generate' capability)"
+
+  if [ "$STATUS" = "succeeded" ]; then
+    RESULT_ID=$(printf '%s' "$SUB" | python3 -c "
+import sys,json
+d=json.load(sys.stdin); print((d.get('subtask') or d).get('result_artifact_id') or '')" 2>/dev/null)
+    if [ -n "$RESULT_ID" ]; then
+      CHUNK=$(curl -fsS "$AC_URL/artifacts/$RESULT_ID/chunk?limit=8000" "${AAUTH[@]}")
+      TEXT=$(printf '%s' "$CHUNK" | jqd "d.get('content','')")
+      NONEMPTY=$(python3 -c "
+t='''$TEXT'''
+print(bool(t.strip()) and t.strip() != '''$PROMPT'''.strip())
+" 2>/dev/null)
+      echo "  ---- real model output (artifact $RESULT_ID) ----"
+      printf '%s\n' "$TEXT" | sed 's/^/  | /'
+      echo "  -------------------------------------------------"
+      if [ "$NONEMPTY" = "True" ]; then
+        ok "subtask succeeded via the real compute worker; artifact holds real generated text"
+      else
+        bad "subtask succeeded but the artifact content looks empty or is just the prompt echoed back"
+      fi
+      NEW=$(curl -fsS "$TC_URL/audit?kind=decision&limit=10" "${TCAUTH[@]}")
+      DEC=$(printf '%s' "$NEW" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+for r in d.get('records',[]):
+    if r['seq']>$BASE_SEQ and r['body'].get('source')=='$SRC':
+        print(r['body'].get('decision_id',''), r['body'].get('tool',''), r['body'].get('allowed'))
+" 2>/dev/null)
+      if [ -n "$DEC" ]; then
+        ok "governor really authorized it — real ToolConnect decision(s) in the audit chain:"
+        printf '%s\n' "$DEC" | sed 's/^/       decision_id=/'
+      else
+        bad "subtask succeeded but no matching ToolConnect decision record appears in the audit chain"
+      fi
+    else
+      bad "subtask succeeded but has no result_artifact_id: $SUB"
+    fi
+  else
+    bad "subtask did not succeed (status=$STATUS)"
+    echo
+    echo "  ---- diagnosing why the headline run did not pass ----"
+    NEW=$(curl -fsS "$TC_URL/audit?kind=decision&limit=10" "${TCAUTH[@]}")
+    NEWCOUNT=$(printf '%s' "$NEW" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+rows=[r for r in d.get('records',[]) if r['seq']>$BASE_SEQ and r['body'].get('source')=='$SRC']
+print(len(rows))
+for r in rows:
+    print('  DECISION', json.dumps(r['body']))
+" 2>/dev/null)
+    ROWCOUNT=$(printf '%s' "$NEWCOUNT" | head -1)
+    if [ "${ROWCOUNT:-0}" = "0" ]; then
+      note "no new ToolConnect decision record appeared for source=$SRC since seq $BASE_SEQ."
+      note "that means AgentConnect's governor consult never reached ToolConnect's policy"
+      note "engine at all — a TRANSPORT/AUTH failure, not a Cedar policy deny (a policy"
+      note "deny, like the one seen in step [3] below, always leaves a decision record)."
+      note "reproducing AgentConnect's exact outgoing request live:"
+      RAW_TOK="${TOOLCONNECT_AUTH_TOKEN:-}"
+      RAW_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$TC_URL/authorize" \
+        -H "Authorization: $RAW_TOK" -H "$CT" \
+        -d "{\"principal\":{\"id\":\"local-manager\",\"privacy_tier\":\"local\",\"kind\":\"agent\"},\"source_id\":\"$SRC\",\"name\":\"generate\"}")
+      BEARER_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$TC_URL/authorize" \
+        -H "Authorization: Bearer $RAW_TOK" -H "$CT" \
+        -d "{\"principal\":{\"id\":\"local-manager\",\"privacy_tier\":\"local\",\"kind\":\"agent\"},\"source_id\":\"$SRC\",\"name\":\"generate\"}")
+      note "  Authorization: <raw token>        -> HTTP $RAW_CODE  (this is what AgentConnect sends)"
+      note "  Authorization: Bearer <raw token> -> HTTP $BEARER_CODE  (what ToolConnect actually requires)"
+      if [ "$RAW_CODE" = "401" ] && [ "$BEARER_CODE" = "200" ]; then
+        note ""
+        note "ROOT CAUSE (confirmed live, not just asserted): deploy/docker-compose.yml sets"
+        note "  AGENTCONNECT_TOOLCONNECT_TOKEN: \${TOOLCONNECT_AUTH_TOKEN:?...}"
+        note "as the RAW token. ToolConnectGovernor sends it verbatim as the Authorization"
+        note "header (toolconnect_client.py: 'sent verbatim ... mirrors the memory adapters')"
+        note "with NO 'Bearer ' scheme, but ToolConnect's server requires the 'Bearer ' scheme"
+        note "(server.py _authenticated(): scheme.lower() != 'bearer' => 401) and denies"
+        note "anything else. Contrast the adjacent, CORRECT line in the same compose file:"
+        note "  AGENTCONNECT_COMPUTE_TOKEN: \${COMPUTECONNECT_TOKEN:+Bearer \${COMPUTECONNECT_TOKEN}}"
+        note "which is exactly why real generation via ComputeConnect works today while the"
+        note "governor consult from AgentConnect never reaches the policy engine at all."
+        note "(BrainConnect's memory token, also raw, is unaffected: BrainConnect's own"
+        note "server.py compares the bare header value and explicitly accepts a bare token —"
+        note "a different, more lenient auth convention than ToolConnect's strict Bearer check.)"
+        note ""
+        note "FIX: AGENTCONNECT_TOOLCONNECT_TOKEN: Bearer \${TOOLCONNECT_AUTH_TOKEN} in"
+        note "docker-compose.yml, then recreate (not just restart) the agentconnect service"
+        note "so it picks up the corrected env. Both steps are outside this gate's granted"
+        note "scope (\"edit deploy/policies.cedar and restart only the toolconnect service\"),"
+        note "so this script does NOT apply it — reported here for you to review and apply."
+      fi
+    else
+      note "ToolConnect DID record a real policy decision for this run (below) — the"
+      note "governor reached the policy engine and a Cedar rule (or default-deny) fired:"
+      printf '%s\n' "$NEWCOUNT" | tail -n +2 | sed 's/^/       /'
+    fi
+    echo "  --------------------------------------------------------"
+  fi
+fi
+echo
+
+# ------------------------------------------------------------------------------- [3]
+echo "[3] GOVERNOR CHOKEPOINT: NARROW the policy back to its shipped state, then the same"
+echo "    real subtask must be DENIED by the composed governor and blocked BEFORE the worker runs"
+echo "    (a real Cedar deny: 0 runs, no artifact, status failed, allowed=False decision record)"
+
+# Strip our widen block (always appended at EOF) so generate/write_artifact are no longer
+# permitted, then reload only toolconnect. This forces a real composed Cedar DENY — not a
+# fail-closed outage — proving the governor genuinely reaches ToolConnect's policy engine.
+sed -i '/--- connect-agent-gate: deliberate widening/,$d' policies.cedar
+$COMPOSE restart toolconnect >/dev/null 2>&1
+for i in $(seq 1 30); do curl -fsS "${TCAUTH[@]}" "$TC_URL/health" >/dev/null 2>&1 && break; sleep 1; done
+
+BASE_SEQ2=$(curl -fsS "$TC_URL/audit?limit=1" "${TCAUTH[@]}" | jqd "(d.get('records') or [{}])[0].get('seq', 0)")
+BASE_SEQ2="${BASE_SEQ2:-0}"
+
+TASK2=$(curl -fsS -X POST "$AC_URL/tasks" "${AAUTH[@]}" -H "$CT" \
+  -d "{\"title\":\"agent-gate chokepoint $RUN_ID\",\"goal\":\"prove the governor blocks before the worker runs\"}")
+TASK2_ID=$(printf '%s' "$TASK2" | jqd "d['id']")
+# On a policy deny the governor blocks before any inference, so this returns fast.
+SUB2=$(curl -fsS -m 60 -X POST "$AC_URL/tasks/$TASK2_ID/subtasks" "${AAUTH[@]}" -H "$CT" -d '{
+  "title": "chokepoint probe",
+  "instructions": "this must never run if the governor blocks it",
+  "preferred_worker": "local-manager",
+  "required_capabilities": ["generate"]
+}')
+SUB2_ID=$(printf '%s' "$SUB2" | jqd "d.get('id')")
+DETAIL2=$(curl -fsS "$AC_URL/subtasks/$SUB2_ID" "${AAUTH[@]}")
+STATUS2=$(printf '%s' "$DETAIL2" | jqd "d['subtask'].get('status')")
+RUNS2=$(printf '%s' "$DETAIL2" | jqd "len(d.get('runs') or [])")
+ARTIFACT2=$(printf '%s' "$DETAIL2" | jqd "d['subtask'].get('result_artifact_id')")
+
+if [ "$STATUS2" = "failed" ] && [ "$RUNS2" = "0" ] && [ "$ARTIFACT2" = "None" ]; then
+  ok "worker never ran: status=failed, runs=0, no result artifact (blocked before inference)"
+else
+  bad "expected a blocked subtask (failed/0 runs/no artifact); got status=$STATUS2 runs=$RUNS2 artifact=$ARTIFACT2"
+fi
+
+# The block must be a REAL Cedar deny (a decision record with allowed=False), proving the
+# governor reached the policy engine — not a fail-closed transport/auth failure.
+NEW2=$(curl -fsS "$TC_URL/audit?kind=decision&limit=10" "${TCAUTH[@]}")
+DENIED=$(printf '%s' "$NEW2" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+rows=[r for r in d.get('records',[]) if r['seq']>$BASE_SEQ2 and r['body'].get('source')=='$SRC']
+denies=[r for r in rows if r['body'].get('allowed') is False]
+print(len(denies))
+for r in denies:
+    b=r['body']
+    print(f\"  decision_id={b.get('decision_id')} tool={b.get('tool')} allowed={b.get('allowed')} reason={b.get('reason')}\")
+" 2>/dev/null)
+DENIED_COUNT=$(printf '%s' "$DENIED" | head -1)
+if [ "${DENIED_COUNT:-0}" != "0" ]; then
+  ok "real composed Cedar DENY in ToolConnect's audit chain (governor reached the policy engine)"
+  printf '%s\n' "$DENIED" | tail -n +2
+else
+  bad "no allowed=False decision recorded for the block (expected a real Cedar deny)"
+fi
+
+# Restore the widened policy so the stack is left working and re-runs stay idempotent.
+cat >> policies.cedar <<'CEDAR'
+
+// --- connect-agent-gate: deliberate widening for the local-manager compute worker ---
+// The shipped policy above permits only READ-effect tools. AgentConnect's
+// auto-registered `local-manager` worker (harness `local_model_manager`) declares
+// `generate` and `write_artifact`, both honestly asserted effect=write (see
+// deploy/connect-agent-gate [1]). Without this rule the governor fail-closed-denies
+// every real-inference subtask, by design (Cedar default-deny). This permits a
+// LOCAL-privacy-tier principal to invoke a write-effect tool that is not reading
+// sensitive data and is not an external sink — i.e. local inference whose output
+// stays in the ledger. The original read-only permit above is untouched.
+@id("local-manager-generate-write")
+permit(
+    principal,
+    action == Action::"invoke",
+    resource
+) when {
+    principal.privacy_tier == "local" &&
+    resource.effect == "write" &&
+    !resource.reads_sensitive &&
+    !resource.external_sink
+};
+CEDAR
+$COMPOSE restart toolconnect >/dev/null 2>&1
+for i in $(seq 1 30); do curl -fsS "${TCAUTH[@]}" "$TC_URL/health" >/dev/null 2>&1 && break; sleep 1; done
+note "restored the widened policy and reloaded toolconnect (stack left in working state)"
+
+CHAIN=$(curl -fsS "$TC_URL/audit/verify" "${TCAUTH[@]}")
+CHAIN_OK=$(printf '%s' "$CHAIN" | jqd "d.get('ok')")
+if [ "$CHAIN_OK" = "True" ]; then
+  ok "ToolConnect's audit chain verifies intact ($(printf '%s' "$CHAIN" | jqd "d.get('records')") records)"
+else
+  bad "ToolConnect audit chain verification failed: $CHAIN"
+fi
+echo
+
+# ------------------------------------------------------------------------------- [4]
+echo "[4] AUXILIARY: the underlying governor code (ALLOW + FORBIDDEN + FAIL-CLOSED), isolated from this deployment"
+DEMO_ROOT="/home/mini/mcp-agentconnect"
+if [ -x "$DEMO_ROOT/.venv/bin/python" ] && [ -f "$DEMO_ROOT/examples/demo_governor_chokepoint.py" ]; then
+  # The demo spawns its OWN scratch ToolConnect subprocess and inherits our shell env
+  # into it (`env = dict(os.environ, ...)` in the demo). If this script's sourced
+  # TOOLCONNECT_AUTH_TOKEN leaks through, the demo's scratch server auto-enables
+  # bearer auth (toolconnect.cli's default token_env=TOOLCONNECT_AUTH_TOKEN) that the
+  # demo's own unauthenticated client never sends — every call 401s and the demo
+  # hangs/fails for a reason that has nothing to do with the governor mechanism
+  # itself. Strip the Connect tokens for this one subprocess so the demo runs in the
+  # clean, isolated environment it was written for.
+  DEMO_OUT=$(cd "$DEMO_ROOT" && env -u TOOLCONNECT_AUTH_TOKEN -u BRAINCONNECT_TOKEN -u COMPUTECONNECT_TOKEN \
+    timeout 60 .venv/bin/python examples/demo_governor_chokepoint.py 2>&1)
+  echo "$DEMO_OUT" | sed 's/^/  | /'
+  if printf '%s' "$DEMO_OUT" | grep -q "ALL SCENARIOS PASS"; then
+    ok "demo_governor_chokepoint.py: ALL SCENARIOS PASS (real ALLOW w/ decision_id, real FORBIDDEN, real FAIL-CLOSED)"
+  else
+    bad "demo_governor_chokepoint.py did not report ALL SCENARIOS PASS"
+  fi
+else
+  bad "cannot find $DEMO_ROOT/.venv/bin/python or the demo script"
+fi
+echo
+
+echo "== SUMMARY: pass=$pass fail=$fail =="
+[ "$fail" -eq 0 ] || exit 1
