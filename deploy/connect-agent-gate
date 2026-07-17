@@ -396,7 +396,7 @@ echo
 
 # ------------------------------------------------------------------------------- [4]
 echo "[4] AUXILIARY: the underlying governor code (ALLOW + FORBIDDEN + FAIL-CLOSED), isolated from this deployment"
-DEMO_ROOT="/home/mini/mcp-agentconnect"
+DEMO_ROOT="${DEMO_ROOT:-/home/mini/mcp-agentconnect}"
 if [ -x "$DEMO_ROOT/.venv/bin/python" ] && [ -f "$DEMO_ROOT/examples/demo_governor_chokepoint.py" ]; then
   # The demo spawns its OWN scratch ToolConnect subprocess and inherits our shell env
   # into it (`env = dict(os.environ, ...)` in the demo). If this script's sourced
