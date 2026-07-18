@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Launcher TEMPLATE for the AgentConnect MCP server (stdio) with
+# SandboxedRuntimeWorkerAdapter additionally registered, so
+# submit_subtask(preferred_worker="sandbox-runtime") routes to a real
+# host-sandboxed container doing real tool work in a git worktree of the
+# shared workspace, instead of only the built-in echo / local_model_manager
+# workers.
+#
+# Copy this file to e.g. ~/connect-mcp/run-planner-mcp.sh, adjust the paths
+# below for your host, and point your MCP client (Claude Code `claude mcp
+# add`, etc.) at the copy. This is a separate launcher pointed at
+# mcp_planner_bridge.py in this directory — it does not modify or fork
+# `agentconnect.mcp.server`.
+#
+# No secrets are hardcoded: every token comes from deploy/.env (sourced
+# below). NEVER hardcode a token in a copy of this file that you commit —
+# only deploy/.env (gitignored) should carry real values.
+set -euo pipefail
+
+# --- Adjust these for your host --------------------------------------------
+CONNECT_DEPLOY_DIR="${CONNECT_DEPLOY_DIR:-/path/to/Connect/deploy}"   # holds .env
+SANDBOX_WORKER_DIR="${SANDBOX_WORKER_DIR:-/path/to/Connect/deploy/sandbox-worker}"
+MCP_AGENTCONNECT_VENV="${MCP_AGENTCONNECT_VENV:-/path/to/mcp-agentconnect/.venv}"
+MCP_STATE_DIR="${MCP_STATE_DIR:-$HOME/.connect-mcp}"                 # db/artifacts/session
+
+# --- Load shared secrets from deploy/.env (never inline a token here) ------
+if [ -f "$CONNECT_DEPLOY_DIR/.env" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$CONNECT_DEPLOY_DIR/.env"
+    set +a
+else
+    echo "WARNING: $CONNECT_DEPLOY_DIR/.env not found; copy .env.example to .env " \
+         "and fill in real tokens first." >&2
+fi
+
+# --- Host-loopback URLs for the running Connect compose stack ---------------
+export BRAINCONNECT_URL="${BRAINCONNECT_URL:-http://127.0.0.1:8887}"
+export BRAINCONNECT_TOKEN="${BRAINCONNECT_TOKEN:-}"
+export AGENTCONNECT_COMPUTE_URL="${AGENTCONNECT_COMPUTE_URL:-http://127.0.0.1:8990}"
+# ComputeConnect/ToolConnect require the "Bearer " scheme on the header
+# AgentConnect sends verbatim; deploy/.env stores the bare token.
+export AGENTCONNECT_COMPUTE_TOKEN="${COMPUTECONNECT_TOKEN:+Bearer ${COMPUTECONNECT_TOKEN}}"
+export AGENTCONNECT_TOOLCONNECT_URL="${AGENTCONNECT_TOOLCONNECT_URL:-http://127.0.0.1:8995}"
+export AGENTCONNECT_TOOLCONNECT_TOKEN="${TOOLCONNECT_AUTH_TOKEN:+Bearer ${TOOLCONNECT_AUTH_TOKEN}}"
+export AGENTCONNECT_TOOLCONNECT_MODE="${AGENTCONNECT_TOOLCONNECT_MODE:-advisory}"
+
+# --- This bridge's own task ledger (separate from the compose stack's) -----
+export AGENTCONNECT_DB_PATH="${AGENTCONNECT_DB_PATH:-$MCP_STATE_DIR/agentconnect.db}"
+export AGENTCONNECT_ARTIFACT_DIR="${AGENTCONNECT_ARTIFACT_DIR:-$MCP_STATE_DIR/artifacts}"
+export AGENTCONNECT_WORKERS="${AGENTCONNECT_WORKERS:-echo}"
+mkdir -p "$MCP_STATE_DIR"
+
+# --- Sandbox worker adapter config (see sandbox_adapter.py for the full list) ---
+export WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/connect-workspace}"
+export WORKTREES_DIR="${WORKTREES_DIR:-$HOME/connect-workspace-worktrees}"
+export CONNECT_WORKER_IMAGE="${CONNECT_WORKER_IMAGE:-connect-worker:m1}"
+export CONNECT_NETWORK="${CONNECT_NETWORK:-connect_default}"
+export AUTO_MERGE="${AUTO_MERGE:-1}"
+
+# Optional per-session task binding: sets AGENTCONNECT_TASK_ID so task-scoped
+# MCP tools default to the current task.
+[ -f "$MCP_STATE_DIR/session.env" ] && . "$MCP_STATE_DIR/session.env"
+
+export PYTHONPATH="$SANDBOX_WORKER_DIR${PYTHONPATH:+:$PYTHONPATH}"
+exec "$MCP_AGENTCONNECT_VENV/bin/python3" "$SANDBOX_WORKER_DIR/mcp_planner_bridge.py"

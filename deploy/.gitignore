@@ -1,3 +1,9 @@
 # Never commit a real environment file — it holds secrets. Only .env.example is tracked.
 .env
 *.db
+
+# sandbox-worker/run.sh stages the monorepo packages here for the Docker build
+# context; never a source-of-truth, regenerated on every run.
+sandbox-worker/.build_context/
+__pycache__/
+*.pyc
