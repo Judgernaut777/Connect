@@ -32,7 +32,7 @@ products:
     local_dir: "../WikiBrain"
     commit: "9b3b6fcfdbf10e63b89a3ee3b3471ba63f00e631"
     tag: "v0.1.2-rc1"
-    commits_since_tag: 0
+    commits_since_tag: 5
     package_version: "0.1.0"
     maturity: "release candidate"
     note: "package_version (0.1.0) was never bumped to match the v0.1.2-rc1 tag. Both are recorded here truthfully; this is a known version/tag mismatch, not a manifest error."
@@ -50,7 +50,7 @@ products:
     local_dir: "../ComputeConnect"
     commit: "0cf962428adfa67611f2ca320a592b177cc55cc0"
     tag: "v0.1.0"
-    commits_since_tag: 0
+    commits_since_tag: 3
     package_version: "0.1.0"
     maturity: "MVP (heterogeneity unproven)"
     note: null
@@ -68,7 +68,7 @@ products:
     local_dir: "../ToolConnect"
     commit: "7788bf7d9dff34bb0e07e92a0c5d5072e51835a1"
     tag: "v0.1.0"
-    commits_since_tag: 0
+    commits_since_tag: 3
     package_version: "0.1.0"
     maturity: "MVP service"
     note: null
