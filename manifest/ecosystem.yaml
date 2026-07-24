@@ -30,9 +30,9 @@ products:
   brainconnect:
     repository: "Judgernaut777/BrainConnect"
     local_dir: "../WikiBrain"
-    commit: "d95ba342946fbe18866e3e1767330fb76dd70b7a"
+    commit: "04adea35526fb35a0315d6d7b53ff3afa90bb861"
     tag: "v0.1.2-rc1"
-    commits_since_tag: 2
+    commits_since_tag: 3
     package_version: "0.1.0"
     maturity: "release candidate"
     note: "package_version (0.1.0) was never bumped to match the v0.1.2-rc1 tag. Both are recorded here truthfully; this is a known version/tag mismatch, not a manifest error."
@@ -41,10 +41,10 @@ products:
     tests:
       runner: "python3 tests/acceptance.py"
       collected: null
-      passed: 951
+      passed: 949
       failed: 0
       skipped: null
-      note: "951 checks passed, 0 failed. Do not set a global BRAINCONNECT_DB when running this gate -- it breaks per-check isolation."
+      note: "949 checks passed, 0 failed on the bare core install (the CI gate's configuration; the mixed-model embeddings checks self-skip without the [semantic] extra's numpy -- with numpy present the suite reports 952). Do not set a global BRAINCONNECT_DB when running this gate -- it breaks per-check isolation."
   computeconnect:
     repository: "Judgernaut777/ComputeConnect"
     local_dir: "../ComputeConnect"

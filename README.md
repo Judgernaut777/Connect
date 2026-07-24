@@ -30,7 +30,7 @@ at its repository root and inside every wheel.
 
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 Test gates, from the ecosystem manifest:
-AgentConnect **1060 passed / 3 skipped**, BrainConnect **951 passed / 0 failed**,
+AgentConnect **1060 passed / 3 skipped**, BrainConnect **949 passed / 0 failed**,
 ComputeConnect **129 passed** (140 collected, offline gate), ToolConnect **339 passed / 3
 skipped** (342 collected).
 
@@ -263,11 +263,10 @@ Ecosystem-level status, stated plainly:
   now driven by `AGENTCONNECT_COMPUTE_URL` (or `config/compute.yaml`); the `local-manager` worker
   appears in `GET /health` when configured. Verified in the Compose stack.
 
-The one honest deploy-layer caveat found while building [deploy/](deploy/): `agentconnect-core`
-lazily imports **httpx** for all three of its HTTP clients but does not declare it as a
-dependency, so a base `agentconnect-api` install cannot reach the sibling services until `httpx`
-is present. The Compose image installs it explicitly; a combined venv gets it transitively via
-ComputeConnect. Reported upstream.
+The one honest deploy-layer caveat found while building [deploy/](deploy/) — `agentconnect-core`
+lazily imported **httpx** for all three of its HTTP clients without declaring it as a
+dependency — was reported upstream and is fixed: `agentconnect-core` now declares
+`httpx>=0.27`, so a base install reaches the sibling services with no extra pin.
 
 Three low-severity security hardening notes are recorded in
 [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps). The independent security review found **no
