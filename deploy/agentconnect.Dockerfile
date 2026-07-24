@@ -1,12 +1,14 @@
 # AgentConnect API service (the task backplane's HTTP adapter).
 #
 # Build context is the mcp-agentconnect repo root (set in docker-compose.yml), so
-# the COPY paths below are repo-relative. We install three of the nine AC packages:
-#   - agentconnect-core  (the service, memory/compute/toolconnect clients live here)
-#   - agentconnect-api   (the FastAPI adapter + the `agentconnect-api` entrypoint)
-#   - agentconnect-cli   (the `agentconnect` operator CLI — needed so an operator can
-#                         `agentconnect tokens issue` inside the container; the smoke
-#                         test mints its bearer token that way)
+# the COPY paths below are repo-relative. We install four of the nine AC packages:
+#   - agentconnect-core   (the service, memory/compute/toolconnect clients live here)
+#   - agentconnect-router (routing engine — needed so the api's /route/decide answers
+#                          instead of degrading to its documented 503)
+#   - agentconnect-api    (the FastAPI adapter + the `agentconnect-api` entrypoint)
+#   - agentconnect-cli    (the `agentconnect` operator CLI — needed so an operator can
+#                          `agentconnect tokens issue` inside the container; the smoke
+#                          test mints its bearer token that way)
 # This is the base install: no Temporal, no Linear, no torch. core==0.1.0 is resolved
 # from the local path, never from PyPI.
 FROM python:3.11-slim
@@ -25,8 +27,8 @@ COPY packages/agentconnect-cli    /src/agentconnect-cli
 # Install core first so the api's `agentconnect-core==0.1.0` pin resolves locally.
 # agentconnect-core declares httpx>=0.27 (its memory/compute/ToolConnect clients need
 # it), so a base install reaches the sibling services without any extra pin here.
-# agentconnect-router is required at import time by the api's /route/decide route
-# (agentconnect.api.routes_route -> agentconnect.router.routing), so install it too.
+# The api imports agentconnect-router lazily and degrades /route/decide to a
+# documented 503 without it; install it so a deployed API actually routes.
 RUN pip install /src/agentconnect-core \
  && pip install /src/agentconnect-router \
  && pip install /src/agentconnect-api /src/agentconnect-cli

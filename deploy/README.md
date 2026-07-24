@@ -15,7 +15,7 @@ Compose v2; the captured output below is real.
 | File | What it is |
 |---|---|
 | `docker-compose.yml` | The four services, one network, named volumes, healthchecks |
-| `agentconnect.Dockerfile` | Installs `agentconnect-core` + `-api` + `-cli` (+ `httpx`) from the AC repo |
+| `agentconnect.Dockerfile` | Installs `agentconnect-core` + `-router` + `-api` + `-cli` from the AC repo |
 | `brainconnect.Dockerfile` | Installs `brainconnect-ai` from the BrainConnect (WikiBrain) repo |
 | `computeconnect.Dockerfile` | Installs `computeconnect` from the ComputeConnect repo |
 | `toolconnect.Dockerfile` | Installs `toolconnect` from the ToolConnect repo |
@@ -31,7 +31,16 @@ at `Connect/deploy/` next to those checkouts.
 ## Prerequisites
 
 - Docker + Docker Compose v2 (`docker compose version`).
-- The four product repos checked out next to `Connect/` at their `0.1.0` tips.
+- The four product repos checked out next to `Connect/` under the directory names the
+  compose contexts expect — AgentConnect and BrainConnect publish under different names,
+  so clone those two with an explicit target directory:
+
+  ```bash
+  git clone https://github.com/Judgernaut777/AgentConnect mcp-agentconnect
+  git clone https://github.com/Judgernaut777/BrainConnect WikiBrain
+  git clone https://github.com/Judgernaut777/ComputeConnect
+  git clone https://github.com/Judgernaut777/ToolConnect
+  ```
 - Optional: a llama.cpp (or any OpenAI-compatible) engine on the host for ComputeConnect
   to place real work on. Without one — or when it is bound to host loopback only —
   ComputeConnect comes up **`degraded`** and the stack is still healthy.
@@ -39,14 +48,19 @@ at `Connect/deploy/` next to those checkouts.
 ## Run it
 
 ```bash
+cd Connect/deploy
+
 # Reproducible build: check out the release you want in each sibling repo first.
 # Compose builds each image from the sibling repo's WORKING TREE (context: ../../<repo>),
-# so the images reflect whatever is checked out there — pin it to the release tag:
-for r in ../../mcp-agentconnect ../../WikiBrain ../../ComputeConnect ../../ToolConnect; do
-  git -C "$r" checkout v0.1.0-rc2      # or the tag you are deploying
-done
+# so the images reflect whatever is checked out there — pin each repo to the commit
+# recorded in ../manifest/ecosystem.yaml (the ecosystem lockfile: pin the exact commit,
+# not a floating tag — no single tag spans all four repos):
+pin() { PYTHONPATH=../scripts python3 -c "import _manifest_yaml as my; m = my.load(open('../manifest/ecosystem.yaml').read()); print(m['products']['$1']['commit'])"; }
+git -C ../../mcp-agentconnect checkout "$(pin agentconnect)"     # or the commit/tag you are deploying
+git -C ../../WikiBrain checkout "$(pin brainconnect)"
+git -C ../../ComputeConnect checkout "$(pin computeconnect)"
+git -C ../../ToolConnect checkout "$(pin toolconnect)"
 
-cd Connect/deploy
 cp .env.example .env          # then edit: set real BRAINCONNECT_TOKEN + TOOLCONNECT_AUTH_TOKEN
 docker compose build
 docker compose up -d
@@ -57,8 +71,8 @@ docker compose down           # add -v to also drop the data volumes
 ```
 
 > The four `context:` paths point at the sibling checkouts, not at a pinned git ref — Docker
-> build contexts are directories, not tags. Checking out the release tag in each repo before
-> `docker compose build` is what makes the built images correspond to that release.
+> build contexts are directories, not tags. Checking out the manifest-pinned commit in each
+> repo before `docker compose build` is what makes the built images correspond to that release.
 
 Generate strong tokens with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
