@@ -23,8 +23,8 @@ Every product runs standalone. These are the copy-pasteable per-product installs
 ### AgentConnect
 
 ```bash
-git clone https://github.com/Judgernaut777/AgentConnect
-cd AgentConnect
+git clone https://github.com/Judgernaut777/AgentConnect mcp-agentconnect   # target dir = the name the deploy/ stack expects
+cd mcp-agentconnect
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e packages/agentconnect-core -e packages/agentconnect-cli
 export AGENTCONNECT_DB_PATH="$PWD/agentconnect.db"
@@ -37,8 +37,8 @@ The other packages — `agentconnect-router`, `-runtime`, `-model-manager`, `-ap
 ### BrainConnect
 
 ```bash
-git clone https://github.com/Judgernaut777/BrainConnect
-cd BrainConnect
+git clone https://github.com/Judgernaut777/BrainConnect WikiBrain   # target dir = the name the deploy/ stack expects
+cd WikiBrain
 cp config.example.toml config.toml
 python3 -m venv .venv
 .venv/bin/python -m pip install -e .        # installs `brainconnect` + `brainconnect-librarian`
@@ -166,7 +166,7 @@ returns `eligible=true` selecting the local model.
 # In the AgentConnect environment — bind the fail-closed governor:
 export AGENTCONNECT_TOOLCONNECT_URL="http://localhost:8095"
 export AGENTCONNECT_TOOLCONNECT_TOKEN="$TC_TOKEN"   # if the server was started with a token
-export AGENTCONNECT_TOOLCONNECT_MODE=required        # fail-closed; `advisory` logs but does not block
+export AGENTCONNECT_TOOLCONNECT_MODE=required        # label only: any deny OR outage blocks, in either mode
 ```
 
 AgentConnect ships a first-class client: `agentconnect-core`'s `ToolConnectGovernor` consults
@@ -197,12 +197,12 @@ python3 -m venv .buildenv && source .buildenv/bin/activate && pip install build
 WHEELHOUSE="$PWD/wheelhouse"; mkdir -p "$WHEELHOUSE"
 
 # AgentConnect — nine wheels, one per package under packages/agentconnect-*:
-for pkg in AgentConnect/packages/agentconnect-*; do
+for pkg in mcp-agentconnect/packages/agentconnect-*; do
   ( cd "$pkg" && python -m build --wheel --outdir "$WHEELHOUSE" )
 done
 
 # The other three — one wheel each, built from the repo root:
-for repo in BrainConnect ComputeConnect ToolConnect; do
+for repo in WikiBrain ComputeConnect ToolConnect; do
   ( cd "$repo" && python -m build --wheel --outdir "$WHEELHOUSE" )
 done
 # Nine AgentConnect wheels + three = twelve. Confirm: `ls "$WHEELHOUSE"/*.whl | wc -l` → 12.

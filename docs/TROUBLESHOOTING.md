@@ -7,11 +7,11 @@ cause and fix. Each entry is something that was hit and resolved, not hypothetic
 
 ### `agentconnect-api` can't reach BrainConnect/ComputeConnect/ToolConnect; recall warns "No module named 'httpx'"
 
-**Cause:** `agentconnect-core` lazily imports `httpx` in all three HTTP clients but declares
-only `pydantic` + `pyyaml`. A base `agentconnect-api` install has no `httpx`. In a combined
-venv this is masked because ComputeConnect depends on `httpx>=0.27`.
-**Fix:** install `httpx` in the AgentConnect environment (the deploy image does this:
-`pip install ... "httpx>=0.27"`). Upstream fix is to add it to `agentconnect-core`.
+**Cause:** older `agentconnect-core` lazily imported `httpx` in all three HTTP clients but
+declared only `pydantic` + `pyyaml`, so a base `agentconnect-api` install had no `httpx`.
+**Fix:** fixed upstream — `agentconnect-core` now declares `httpx>=0.27`. If you still see
+this, the AgentConnect checkout predates the fix: update it and reinstall
+`agentconnect-core`.
 
 ### `pip install brainconnect` installs the wrong package
 
