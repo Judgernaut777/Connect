@@ -14,7 +14,7 @@ All four products released `0.1.0` on 2026-07-12. What follows is keyed on those
 | Product | Version | Maturity | Requires Python | Gate |
 |---|---|---|---|---|
 | AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1060 passed / 3 skipped (`pytest`, offline) |
-| BrainConnect | 0.1.0 (tag `v0.1.2-rc1` — version/tag mismatch, see note below) | Release candidate | `>= 3.11` | 951 passed / 0 failed (`python3 tests/acceptance.py`) |
+| BrainConnect | 0.1.0 (tag `v0.1.2-rc1` — version/tag mismatch, see note below) | Release candidate | `>= 3.11` | 949 passed / 0 failed (`python3 tests/acceptance.py`) |
 | ComputeConnect | 0.1.0 | MVP (heterogeneity unproven) | `>= 3.11` | 129 passed, 140 collected (`pytest`, offline) |
 | ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 339 passed / 3 skipped, 342 collected (`pytest`, offline) |
 
@@ -218,12 +218,12 @@ container image in [deploy/](deploy/).
 
 The names `agentconnect-*`, `computeconnect`, and `toolconnect` are free on PyPI.
 
-> **Deploy-layer dependency note (found while building [deploy/](deploy/)):** `agentconnect-core`
-> lazily `import httpx` in all three of its HTTP clients (memory adapter, ComputeConnect provider,
-> ToolConnect governor) but declares only `pydantic` + `pyyaml`. A base `agentconnect-api` install
-> therefore cannot reach the sibling services until `httpx` is present. In a combined venv this is
-> masked (ComputeConnect depends on `httpx>=0.27`); the Compose AgentConnect image installs it
-> explicitly. Reported upstream; the fix is to add `httpx` to `agentconnect-core`'s dependencies.
+> **Deploy-layer dependency note (found while building [deploy/](deploy/), since fixed
+> upstream):** `agentconnect-core` lazily `import httpx` in all three of its HTTP clients (memory
+> adapter, ComputeConnect provider, ToolConnect governor) but once declared only `pydantic` +
+> `pyyaml`, so a base `agentconnect-api` install could not reach the sibling services. Reported
+> upstream and fixed: `agentconnect-core` now declares `httpx>=0.27`, so no combined-venv
+> masking or explicit deploy-image install is needed.
 
 ### 2. AgentConnect ↔ ToolConnect — first-class fail-closed governor shipped
 

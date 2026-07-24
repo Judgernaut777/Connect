@@ -17,8 +17,8 @@ AgentConnect is a control plane for managed coding-agent work. The stable path i
 coding-agent loop.
 
 ```bash
-git clone https://github.com/Judgernaut777/AgentConnect
-cd AgentConnect
+git clone https://github.com/Judgernaut777/AgentConnect mcp-agentconnect   # target dir = the name the deploy/ stack expects
+cd mcp-agentconnect
 
 python3 -m venv .venv && source .venv/bin/activate
 
@@ -65,8 +65,8 @@ The package and commands are renamed from WikiBrain; the MCP tools are still `br
 directory is still `~/.wiki-brain/`. See the [naming note](README.md#status-at-a-glance).
 
 ```bash
-git clone https://github.com/Judgernaut777/BrainConnect
-cd BrainConnect
+git clone https://github.com/Judgernaut777/BrainConnect WikiBrain   # target dir = the name the deploy/ stack expects
+cd WikiBrain
 
 cp config.example.toml config.toml
 python3 -m venv .venv
