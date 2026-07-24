@@ -30,7 +30,7 @@ products:
   brainconnect:
     repository: "Judgernaut777/BrainConnect"
     local_dir: "../WikiBrain"
-    commit: "867fe99ed4d92dfaf566fb7be34d356c7ad56895"
+    commit: "04adea35526fb35a0315d6d7b53ff3afa90bb861"
     tag: "v0.1.2-rc1"
     commits_since_tag: 3
     package_version: "0.1.0"
