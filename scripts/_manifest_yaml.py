@@ -7,9 +7,7 @@ with scalar leaves that are JSON-quoted strings, bare integers, `true` /
 `false`, or `null`. No sequences, no flow style, no multi-line scalars.
 
 The output is still valid, standard YAML — `yaml.safe_load()` parses it
-identically to `load()` below. Round-tripped by
-`tests/test_manifest_yaml_roundtrip` equivalent checks in check_manifest.py
-(see its self-check on import).
+identically to `load()` below.
 """
 from __future__ import annotations
 
