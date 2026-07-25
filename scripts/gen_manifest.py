@@ -75,11 +75,6 @@ PRODUCTS: dict[str, dict] = {
     },
 }
 
-_PYTEST_SUMMARY_RE = re.compile(
-    r"(?:(?P<passed>\d+) passed)?"
-    r"(?:.*?(?P<failed>\d+) failed)?"
-    r"(?:.*?(?P<skipped>\d+) skipped)?",
-)
 _PYTEST_COLLECTED_RE = re.compile(r"collected (\d+) item")
 _ACCEPTANCE_RESULT_RE = re.compile(r"RESULT:\s*(\d+)\s*passed,\s*(\d+)\s*failed")
 
@@ -103,13 +98,25 @@ def git_tag_and_offset(local_dir: Path) -> tuple[str | None, int]:
         ["git", "-C", str(local_dir), "describe", "--tags", "--long"], cwd=REPO_ROOT
     )
     if proc.returncode != 0:
-        # No tags reachable at all -- fall back to the newest tag in the repo,
-        # if any, with an unknown offset recorded as 0 rather than fabricated.
+        # `git describe` fails when no tag is an ancestor of HEAD (HEAD sits
+        # on history that diverged from every tag). Fall back to the newest
+        # tag in the repo and record the REAL distance from that tag to HEAD
+        # via `git rev-list --count <tag>..HEAD`. Recording 0 here would read
+        # as "HEAD is at the release tag" -- false when HEAD is off on a
+        # divergent branch -- and would silently contradict the commit field.
         proc2 = run(
             ["git", "-C", str(local_dir), "tag", "--sort=-creatordate"], cwd=REPO_ROOT
         )
         tags = [t for t in proc2.stdout.splitlines() if t.strip()]
-        return (tags[0] if tags else None), 0
+        if not tags:
+            return None, 0
+        tag = tags[0]
+        proc3 = run(
+            ["git", "-C", str(local_dir), "rev-list", "--count", f"{tag}..HEAD"],
+            cwd=REPO_ROOT,
+        )
+        offset = int(proc3.stdout.strip()) if proc3.returncode == 0 else 0
+        return tag, offset
     described = proc.stdout.strip()
     m = re.match(r"^(?P<tag>.+)-(?P<n>\d+)-g[0-9a-f]+$", described)
     if not m:
@@ -117,16 +124,29 @@ def git_tag_and_offset(local_dir: Path) -> tuple[str | None, int]:
     return m.group("tag"), int(m.group("n"))
 
 
+def parse_pytest_counts(output: str) -> tuple[int | None, int | None, int | None]:
+    """Return (passed, failed, skipped) parsed from a pytest run's output.
+
+    Each keyword is searched for independently rather than with one combined
+    pattern: a single all-optional regex matches the empty string at offset 0
+    on normal output (every group None), and any fixed ordering breaks on
+    pytest's real "N failed, M passed, K skipped" summary. Independent
+    searches cannot match zero-width and are order-independent. A missing
+    keyword stays None so a real count is never silently overwritten.
+    """
+    def find(keyword: str) -> int | None:
+        m = re.search(rf"(\d+) {keyword}", output)
+        return int(m.group(1)) if m else None
+
+    return find("passed"), find("failed"), find("skipped")
+
+
 def run_pytest_gate(local_dir: Path, extra_args: list[str] | None) -> dict:
     cmd = ["python3", "-m", "pytest", "-q", *(extra_args or [])]
     proc = run(cmd, cwd=local_dir)
     output = proc.stdout + "\n" + proc.stderr
-    passed = failed = skipped = collected = None
-    m = _PYTEST_SUMMARY_RE.search(output)
-    if m:
-        passed = int(m.group("passed")) if m.group("passed") else None
-        failed = int(m.group("failed")) if m.group("failed") else None
-        skipped = int(m.group("skipped")) if m.group("skipped") else None
+    collected = None
+    passed, failed, skipped = parse_pytest_counts(output)
     cm = _PYTEST_COLLECTED_RE.search(output)
     if cm:
         collected = int(cm.group(1))
