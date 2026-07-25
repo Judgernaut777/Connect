@@ -30,9 +30,9 @@ at its repository root and inside every wheel.
 
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 Test gates, from the ecosystem manifest:
-AgentConnect **1028 passed / 16 skipped**, BrainConnect **949 passed / 0 failed**,
-ComputeConnect **132 passed** (144 collected, offline gate), ToolConnect **339 passed / 3
-skipped** (342 collected).
+AgentConnect **1042 passed / 11 skipped**, BrainConnect **950 passed / 0 failed**,
+ComputeConnect **136 passed** (137 collected, offline gate), ToolConnect **342 passed / 3
+skipped** (345 collected).
 
 ComputeConnect's 11 real-engine tests are excluded from that offline count — they need a live
 llama.cpp on `:8080`, and 9 of them currently fail only because the host model was renamed
