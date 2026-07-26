@@ -1,0 +1,659 @@
+<title>CONNECT — Synthwave Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  /* ============================================================
+     CONNECT · Synthwave visual-direction prototype
+     A working reference for the design handoff. Single-theme by
+     deliberate choice (a neon arcade screen has no light mode).
+     Everything self-contained: no external fonts, scripts, or assets.
+     ============================================================ */
+
+  :root {
+    /* ground — indigo-black, biased toward the magenta accent, never pure #000 */
+    --ground:      #0a0413;
+    --ground-2:    #150a2b;
+    --panel:       rgba(30, 12, 54, 0.55);
+
+    /* neon */
+    --magenta:     #ff2e97;
+    --pink:        #ff41a6;
+    --cyan:        #05d9e8;
+    --violet:      #7b2ff7;
+    --violet-lite: #b14aed;
+
+    /* sunset ramp */
+    --sun-top:     #ffcc00;
+    --sun-mid:     #ff6b35;
+    --sun-bot:     #ff2e97;
+
+    /* ink */
+    --ink:         #f5e6ff;   /* violet-white */
+    --ink-dim:     #b9a2d6;
+    --ink-mute:    #6f5a91;
+
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+    --sans: "Helvetica Neue", Arial, "Segoe UI", system-ui, sans-serif;
+
+    --edge: 1px solid rgba(255, 46, 151, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* faint global scanlines — the CRT signature */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 60;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.14) 3px,
+      rgba(0,0,0,0) 4px
+    );
+    mix-blend-mode: multiply;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  /* ===================== TOP BAR ===================== */
+  .bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px clamp(20px, 5vw, 64px);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    background: linear-gradient(to bottom, rgba(10,4,19,0.9), rgba(10,4,19,0));
+    backdrop-filter: blur(2px);
+  }
+  .bar .brand { color: var(--magenta); text-shadow: 0 0 12px var(--magenta); font-weight: 700; }
+  .bar nav { display: flex; gap: clamp(12px, 2.4vw, 34px); color: var(--ink-dim); }
+  .bar nav a { transition: color .2s, text-shadow .2s; }
+  .bar nav a:hover { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
+  .bar .status { color: var(--cyan); }
+  .bar .status::before { content: "●"; margin-right: 7px; animation: pulse 1.6s steps(1) infinite; }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+
+  /* ===================== HERO ===================== */
+  .hero {
+    position: relative;
+    height: 100svh;
+    min-height: 620px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  /* sky gradient */
+  .hero .sky {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(120% 80% at 50% 78%, rgba(255,46,151,0.28), transparent 60%),
+      linear-gradient(to bottom, #1a0733 0%, #3a0f52 34%, #7a1e63 60%, #0a0413 61%);
+    z-index: 0;
+  }
+
+  /* starfield */
+  .stars { position: absolute; inset: 0; z-index: 1; }
+
+  /* the sun */
+  .sun {
+    position: absolute;
+    left: 50%;
+    top: 20%;
+    width: min(46vw, 420px);
+    aspect-ratio: 1;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: linear-gradient(to bottom, var(--sun-top), var(--sun-mid) 52%, var(--sun-bot));
+    z-index: 2;
+    box-shadow: 0 0 90px 20px rgba(255,107,53,0.45), 0 0 200px 60px rgba(255,46,151,0.25);
+    -webkit-mask: linear-gradient(#000 0 0);
+            mask: linear-gradient(#000 0 0);
+    animation: sun-rise 1.6s cubic-bezier(.16,.84,.44,1) both;
+  }
+  /* the classic horizontal sun-slats, widening toward the base */
+  .sun::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0 24px,
+      var(--ground) 24px 27px,
+      transparent 27px 30px,
+      var(--ground) 30px 34px,
+      transparent 34px 40px,
+      var(--ground) 40px 45px
+    );
+    mask: linear-gradient(to top, #000 0%, transparent 62%);
+    -webkit-mask: linear-gradient(to top, #000 0%, transparent 62%);
+  }
+  @keyframes sun-rise { from { transform: translateX(-50%) translateY(60px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+
+  /* the perspective grid floor */
+  .floor {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 300%;
+    height: 46%;
+    transform: translateX(-50%) perspective(340px) rotateX(74deg);
+    transform-origin: bottom center;
+    z-index: 3;
+    background-image:
+      linear-gradient(to right,  rgba(255,65,166,0.55) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(5,217,232,0.42) 1px, transparent 1px);
+    background-size: 4.4% 44px;
+    background-position: center bottom;
+    animation: grid-run 1.1s linear infinite;
+    mask: linear-gradient(to top, #000 55%, transparent);
+    -webkit-mask: linear-gradient(to top, #000 55%, transparent);
+  }
+  .floor::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(123,47,247,0.35), transparent 70%);
+  }
+  @keyframes grid-run { from { background-position-y: 0; } to { background-position-y: 44px; } }
+
+  /* horizon glow line */
+  .horizon {
+    position: absolute; left: 0; right: 0; bottom: 46%;
+    height: 2px; z-index: 4;
+    background: var(--cyan);
+    box-shadow: 0 0 18px 3px var(--cyan), 0 0 60px 10px rgba(5,217,232,0.5);
+  }
+
+  /* palm silhouettes */
+  .palm { position: absolute; bottom: 42%; z-index: 5; filter: drop-shadow(0 0 6px rgba(0,0,0,0.6)); }
+  .palm.l { left: clamp(10px, 7vw, 130px); width: clamp(90px, 12vw, 170px); animation: sway 5s ease-in-out infinite; transform-origin: bottom center; }
+  .palm.r { right: clamp(10px, 6vw, 110px); width: clamp(110px, 14vw, 210px); animation: sway 6.5s ease-in-out infinite reverse; transform-origin: bottom center; }
+  @keyframes sway { 0%,100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+
+  /* the car, driving toward the sun */
+  .car {
+    position: absolute;
+    left: 50%;
+    bottom: 30%;
+    width: min(30vw, 260px);
+    transform: translateX(-50%);
+    z-index: 6;
+    filter: drop-shadow(0 0 14px rgba(255,46,151,0.7));
+    animation: car-in 1.9s cubic-bezier(.16,.84,.44,1) both, hover 3.4s ease-in-out 1.9s infinite;
+  }
+  @keyframes car-in { from { transform: translateX(-50%) translateY(70px) scale(.7); opacity: 0; } to { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; } }
+  @keyframes hover { 0%,100% { margin-bottom: 0; } 50% { margin-bottom: 8px; } }
+
+  /* hero copy */
+  .hero .copy {
+    position: relative;
+    z-index: 10;
+    padding: 0 clamp(20px, 5vw, 64px) clamp(40px, 9vh, 110px);
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+    text-align: center;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: clamp(11px, 1.5vw, 14px);
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    text-shadow: 0 0 12px var(--cyan);
+    margin: 0 0 18px;
+    animation: flicker 4s infinite;
+  }
+  @keyframes flicker {
+    0%,19%,21%,50%,55%,100% { opacity: 1; }
+    20%,54% { opacity: 0.35; }
+  }
+
+  .title {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-style: italic;
+    font-size: clamp(56px, 15vw, 190px);
+    line-height: 0.86;
+    letter-spacing: -0.02em;
+    margin: 0;
+    text-transform: uppercase;
+    /* chrome gradient fill */
+    background: linear-gradient(to bottom, #fff 0%, #ffe9fb 34%, var(--pink) 52%, var(--violet) 78%, var(--cyan) 100%);
+    -webkit-background-clip: text;
+            background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    filter: drop-shadow(0 2px 0 rgba(255,46,151,0.55)) drop-shadow(0 0 26px rgba(255,46,151,0.5));
+  }
+  .title .glitch { position: relative; }
+
+  .sub {
+    font-family: var(--mono);
+    font-size: clamp(13px, 2vw, 19px);
+    color: var(--ink-dim);
+    letter-spacing: 0.06em;
+    margin: 20px auto 0;
+    max-width: 60ch;
+    text-wrap: balance;
+  }
+  .sub b { color: var(--ink); font-weight: 600; }
+
+  .cta-row { display: flex; gap: 16px; justify-content: center; margin-top: 34px; flex-wrap: wrap; }
+  .btn {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    padding: 15px 30px;
+    border: 1.5px solid var(--magenta);
+    color: var(--ink);
+    background: rgba(255,46,151,0.08);
+    position: relative;
+    transition: transform .18s, box-shadow .18s, background .18s;
+    box-shadow: 0 0 0 rgba(255,46,151,0);
+  }
+  .btn:hover { transform: translateY(-2px); background: rgba(255,46,151,0.2); box-shadow: 0 0 26px rgba(255,46,151,0.7), inset 0 0 20px rgba(255,46,151,0.25); }
+  .btn.ghost { border-color: var(--cyan); background: rgba(5,217,232,0.06); }
+  .btn.ghost:hover { background: rgba(5,217,232,0.18); box-shadow: 0 0 26px rgba(5,217,232,0.6), inset 0 0 20px rgba(5,217,232,0.2); }
+
+  .scroll-hint {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.4em; color: var(--ink-mute);
+    z-index: 11; text-transform: uppercase;
+    animation: bob 2s ease-in-out infinite;
+  }
+  @keyframes bob { 50% { transform: translateX(-50%) translateY(6px); } }
+
+  /* ===================== ECOSYSTEM CONSTELLATION ===================== */
+  .section-label {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--magenta);
+    text-align: center;
+    padding-top: clamp(70px, 12vh, 130px);
+  }
+  .section-head {
+    font-family: var(--sans);
+    font-weight: 800; font-style: italic;
+    text-transform: uppercase;
+    text-align: center;
+    font-size: clamp(30px, 6vw, 68px);
+    margin: 10px auto 8px;
+    color: var(--ink);
+    text-shadow: 0 0 24px rgba(123,47,247,0.6);
+    text-wrap: balance;
+  }
+  .section-sub {
+    font-family: var(--mono); text-align: center; color: var(--ink-dim);
+    max-width: 62ch; margin: 0 auto; padding: 0 20px; font-size: 14px; line-height: 1.6;
+  }
+
+  /* deliberately non-linear scatter: a CSS grid the cards break out of */
+  .constellation {
+    position: relative;
+    max-width: 1160px;
+    margin: 60px auto 0;
+    padding: 20px clamp(16px, 4vw, 40px) 120px;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 22px;
+  }
+
+  .card {
+    position: relative;
+    grid-column: span 6;
+    padding: 26px 26px 30px;
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-top: 2px solid var(--acc, var(--magenta));
+    backdrop-filter: blur(6px);
+    overflow: hidden;
+    transition: transform .25s ease, box-shadow .25s ease, border-color .25s;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+  }
+  .card::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--acc) 22%, transparent), transparent 55%);
+    pointer-events: none;
+    opacity: 0.7;
+  }
+  .card:hover {
+    transform: translateY(-8px) rotate(var(--untilt, 0deg));
+    box-shadow: 0 0 40px color-mix(in srgb, var(--acc) 50%, transparent), 0 24px 60px rgba(0,0,0,0.55);
+    border-color: var(--acc);
+  }
+
+  /* scatter offsets — each card sits at its own altitude and tilt */
+  .card.c1 { grid-column: 1 / span 6;  transform: translateY(0) rotate(-1.4deg); --untilt: 0deg; --acc: var(--magenta); }
+  .card.c2 { grid-column: 8 / span 5;  transform: translateY(44px) rotate(1.2deg); --untilt: 0deg; --acc: var(--cyan); }
+  .card.c3 { grid-column: 2 / span 5;  transform: translateY(18px) rotate(1.1deg); --untilt: 0deg; --acc: var(--violet-lite); }
+  .card.c4 { grid-column: 7 / span 6;  transform: translateY(-14px) rotate(-1.1deg); --untilt: 0deg; --acc: var(--sun-mid); }
+  .card.c5 { grid-column: 1 / span 5;  transform: translateY(20px) rotate(-1.6deg); --untilt: 0deg; --acc: var(--cyan); }
+  .card.c6 { grid-column: 7 / span 6;  transform: translateY(52px) rotate(1.5deg); --untilt: 0deg; --acc: var(--pink); }
+  .card:hover { transform: translateY(-8px) rotate(0deg); }
+
+  .card .tag {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--acc); text-shadow: 0 0 10px color-mix(in srgb, var(--acc) 60%, transparent);
+  }
+  .card h3 {
+    font-family: var(--sans); font-weight: 800; font-style: italic; text-transform: uppercase;
+    font-size: clamp(22px, 3vw, 30px); margin: 8px 0 4px; color: var(--ink);
+  }
+  .card .role { font-family: var(--mono); font-size: 12px; color: var(--acc); margin: 0 0 14px; }
+  .card p { font-size: 14.5px; line-height: 1.62; color: var(--ink-dim); margin: 0; }
+  .card .quote {
+    margin-top: 16px; padding-top: 14px; border-top: 1px dashed rgba(255,255,255,0.14);
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink); font-style: italic;
+  }
+  .card .maturity {
+    position: absolute; top: 20px; right: 22px;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink-mute); border: 1px solid rgba(255,255,255,0.12); padding: 3px 7px; border-radius: 2px;
+  }
+
+  /* ===================== MANIFESTO STRIP ===================== */
+  .manifesto {
+    position: relative;
+    margin-top: 40px;
+    padding: clamp(80px, 16vh, 160px) 20px;
+    text-align: center;
+    background:
+      linear-gradient(to bottom, transparent, rgba(123,47,247,0.12), transparent),
+      repeating-linear-gradient(115deg, transparent 0 38px, rgba(255,46,151,0.05) 38px 39px);
+    border-top: var(--edge);
+    border-bottom: var(--edge);
+    overflow: hidden;
+  }
+  .manifesto .big {
+    font-family: var(--sans); font-weight: 800; font-style: italic; text-transform: uppercase;
+    font-size: clamp(26px, 5.4vw, 60px); line-height: 1.02; margin: 0 auto; max-width: 16ch;
+    color: var(--ink); text-wrap: balance;
+    text-shadow: 0 0 30px rgba(255,46,151,0.5);
+  }
+  .manifesto .big em { color: var(--magenta); font-style: italic; }
+  .manifesto .attrib { font-family: var(--mono); font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--ink-mute); margin-top: 26px; }
+
+  /* ===================== FOOTER ===================== */
+  footer {
+    padding: clamp(60px, 10vh, 110px) clamp(20px, 5vw, 64px) 70px;
+    font-family: var(--mono);
+    color: var(--ink-dim);
+  }
+  .terminal {
+    max-width: 760px; margin: 0 auto;
+    border: 1px solid rgba(5,217,232,0.35);
+    border-radius: 6px;
+    background: rgba(5,10,26,0.7);
+    box-shadow: 0 0 40px rgba(5,217,232,0.15), inset 0 0 40px rgba(5,217,232,0.05);
+    overflow: hidden;
+  }
+  .terminal .tbar { display: flex; gap: 7px; padding: 11px 14px; border-bottom: 1px solid rgba(5,217,232,0.2); }
+  .terminal .tbar i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .terminal .tbar i:nth-child(1){ background: var(--magenta); }
+  .terminal .tbar i:nth-child(2){ background: var(--sun-mid); }
+  .terminal .tbar i:nth-child(3){ background: var(--cyan); }
+  .terminal pre { margin: 0; padding: 20px 22px; font-size: 13px; line-height: 1.75; white-space: pre-wrap; }
+  .terminal .p { color: var(--cyan); }
+  .terminal .c { color: var(--ink); }
+  .terminal .o { color: var(--ink-mute); }
+  .terminal .ok { color: #4dffb0; }
+  .cursor { display: inline-block; width: 9px; height: 15px; background: var(--cyan); vertical-align: text-bottom; animation: pulse 1s steps(1) infinite; }
+  .footmeta { text-align: center; margin-top: 34px; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-mute); }
+  .footmeta b { color: var(--magenta); }
+
+  /* ===================== RESPONSIVE ===================== */
+  @media (max-width: 760px) {
+    .bar nav { display: none; }
+    .card, .card.c1, .card.c2, .card.c3, .card.c4, .card.c5, .card.c6 {
+      grid-column: 1 / -1; transform: none; --untilt: 0deg;
+    }
+    .card:hover { transform: translateY(-6px); }
+    .palm.l { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; scroll-behavior: auto; }
+    .floor { background-position-y: 0; }
+  }
+</style>
+
+<div class="bar">
+  <span class="brand">◆ CONNECT</span>
+  <nav>
+    <a href="#eco">Ecosystem</a>
+    <a href="#eco">AgentConnect</a>
+    <a href="#eco">BrainConnect</a>
+    <a href="#eco">Compute</a>
+    <a href="#eco">Tools</a>
+  </nav>
+  <span class="status">SELF-HOSTED</span>
+</div>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="sky"></div>
+  <canvas class="stars" id="stars"></canvas>
+  <div class="sun"></div>
+  <div class="horizon"></div>
+  <div class="floor"></div>
+
+  <!-- left palm -->
+  <svg class="palm l" viewBox="0 0 120 220" aria-hidden="true">
+    <g fill="#0a0413" stroke="#ff2e97" stroke-width="1.4">
+      <path d="M60 220 C57 150 55 110 58 78 L64 78 C66 120 66 165 64 220 Z"/>
+      <path d="M60 80 C30 55 8 58 0 46 C26 50 44 58 60 74 Z"/>
+      <path d="M60 78 C34 40 30 20 34 4 C48 26 58 50 62 74 Z"/>
+      <path d="M62 78 C90 52 112 56 120 44 C94 48 78 56 62 72 Z"/>
+      <path d="M62 76 C88 40 94 18 90 2 C76 26 66 50 60 74 Z"/>
+      <path d="M61 80 C61 62 61 40 61 22 C63 42 64 62 64 80 Z"/>
+    </g>
+  </svg>
+
+  <!-- right palm -->
+  <svg class="palm r" viewBox="0 0 140 240" aria-hidden="true">
+    <g fill="#0a0413" stroke="#05d9e8" stroke-width="1.5">
+      <path d="M70 240 C66 160 64 116 68 82 L76 82 C79 128 78 186 76 240 Z"/>
+      <path d="M72 84 C40 56 12 60 2 46 C34 52 54 60 72 78 Z"/>
+      <path d="M72 82 C44 40 40 16 44 0 C60 28 70 54 74 78 Z"/>
+      <path d="M74 82 C106 54 134 58 140 44 C110 50 90 58 74 76 Z"/>
+      <path d="M74 80 C104 40 110 14 104 0 C90 28 80 54 72 78 Z"/>
+    </g>
+  </svg>
+
+  <!-- the car -->
+  <svg class="car" viewBox="0 0 260 96" aria-hidden="true">
+    <defs>
+      <linearGradient id="cbody" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ff41a6"/>
+        <stop offset="1" stop-color="#7b2ff7"/>
+      </linearGradient>
+    </defs>
+    <path d="M14 66 L34 46 C44 36 60 32 78 32 L150 32 C176 32 196 40 214 52 L244 60 C252 62 254 66 254 70 L254 76 L8 76 L8 70 C8 68 10 66 14 66 Z"
+          fill="url(#cbody)" stroke="#05d9e8" stroke-width="2"/>
+    <path d="M54 46 L74 38 L142 38 L160 48 Z" fill="#0a0413" stroke="#05d9e8" stroke-width="1.5"/>
+    <rect x="6" y="70" width="248" height="4" fill="#ffcc00"/>
+    <circle cx="66" cy="78" r="15" fill="#0a0413" stroke="#ff2e97" stroke-width="3"/>
+    <circle cx="196" cy="78" r="15" fill="#0a0413" stroke="#ff2e97" stroke-width="3"/>
+    <rect x="246" y="52" width="10" height="8" fill="#fff"/>
+  </svg>
+
+  <div class="copy">
+    <p class="eyebrow">Coding agents you can audit</p>
+    <h1 class="title">Connect</h1>
+    <p class="sub">A <b>self-hosted, privacy-first stack</b> for running coding agents you can actually trust. Four products. One control surface. Nothing leaves your machine.</p>
+    <div class="cta-row">
+      <a class="btn" href="#eco">Enter the Grid →</a>
+      <a class="btn ghost" href="#eco">Read the Manifesto</a>
+    </div>
+  </div>
+  <div class="scroll-hint">Scroll ▾</div>
+</section>
+
+<!-- ============ ECOSYSTEM ============ -->
+<section id="eco">
+  <p class="section-label">// THE ECOSYSTEM</p>
+  <h2 class="section-head">Four planes.<br/>Every one stands alone.</h2>
+  <p class="section-sub">Task, Memory, Compute, and Tools — each a standalone product, composing only at explicit contract seams. No monorepo. No god object. No shared secret.</p>
+
+  <div class="constellation">
+    <article class="card c1">
+      <span class="maturity">Release Candidate</span>
+      <span class="tag">// TASK PLANE</span>
+      <h3>AgentConnect</h3>
+      <p class="role">the control plane</p>
+      <p>A durable, operator-owned ledger for coding-agent work: launch, shell, audit, complete. A managed agent structurally cannot sign off on its own task.</p>
+      <p class="quote">“If it is not recorded, it did not happen.”</p>
+    </article>
+
+    <article class="card c2">
+      <span class="maturity">Release Candidate</span>
+      <span class="tag">// MEMORY PLANE</span>
+      <h3>BrainConnect</h3>
+      <p class="role">trusted memory ledger</p>
+      <p>Agents propose memories. Only a human promotes them to trusted. The CLI makes zero model calls — a hard determinism boundary.</p>
+      <p class="quote">“Agents can only propose, never decide.”</p>
+    </article>
+
+    <article class="card c3">
+      <span class="maturity">Shadow Mode</span>
+      <span class="tag">// CONTROL MODEL</span>
+      <h3>Control Model</h3>
+      <p class="role">the advisory brain</p>
+      <p>A 4B CPU-deployable model emitting strict JSON routing decisions. It advises and detects conflict; deterministic code keeps all authority.</p>
+      <p class="quote">“The model advises. Code decides.”</p>
+    </article>
+
+    <article class="card c4">
+      <span class="maturity">MVP</span>
+      <span class="tag">// COMPUTE PLANE</span>
+      <h3>ComputeConnect</h3>
+      <p class="role">compute control plane</p>
+      <p>Knows what compute exists, whether it's healthy, and whether a model will fit — then decides where work runs. Privacy is structural, default-deny.</p>
+      <p class="quote">“Will this fit? — answered honestly.”</p>
+    </article>
+
+    <article class="card c5">
+      <span class="maturity">MVP</span>
+      <span class="tag">// TOOL PLANE</span>
+      <h3>ToolConnect</h3>
+      <p class="role">tool governance</p>
+      <p>The missing layer: which tools exist, who may call them, and what happened. A fail-closed decision point with a tamper-evident, hash-chained audit.</p>
+      <p class="quote">“An error is a denial.”</p>
+    </article>
+
+    <article class="card c6">
+      <span class="maturity">Integration Preview</span>
+      <span class="tag">// THE UMBRELLA</span>
+      <h3>Connect</h3>
+      <p class="role">where you start</p>
+      <p>One command brings the whole stack up healthy. Un-driftable docs generated from a pinned-commit lockfile. Standalone first, always.</p>
+      <p class="quote">“Every product works alone. None requires another.”</p>
+    </article>
+  </div>
+</section>
+
+<!-- ============ MANIFESTO ============ -->
+<section class="manifesto">
+  <p class="big">AgentConnect controls <em>access.</em><br/>BrainConnect controls <em>trust.</em></p>
+  <p class="attrib">— The Connect Manifesto · Principle 04</p>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="terminal">
+    <div class="tbar"><i></i><i></i><i></i></div>
+    <pre><span class="o"># bring the whole stack up, healthy, on your own metal</span>
+<span class="p">$</span> <span class="c">connect up --all</span>
+<span class="o">→ agentconnect  :8080   </span><span class="ok">healthy</span>
+<span class="o">→ brainconnect  :8787   </span><span class="ok">healthy</span>
+<span class="o">→ computeconnect :8090  </span><span class="ok">healthy</span>
+<span class="o">→ toolconnect   :8095   </span><span class="ok">healthy</span>
+<span class="p">$</span> <span class="c">connect-smoke</span>
+<span class="o">6/6 cross-product checks </span><span class="ok">passed</span>
+<span class="p">$</span> <span class="cursor"></span></pre>
+  </div>
+  <p class="footmeta">CONNECT · Apache-2.0 · <b>self-hosted</b> · privacy-first · nothing leaves your machine</p>
+</footer>
+
+<script>
+  // starfield — a quiet ambient layer behind the sun
+  (function () {
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var cvs = document.getElementById("stars");
+    if (!cvs) return;
+    var ctx = cvs.getContext("2d");
+    var stars = [];
+    function size() {
+      cvs.width = cvs.clientWidth * (window.devicePixelRatio || 1);
+      cvs.height = cvs.clientHeight * (window.devicePixelRatio || 1);
+      stars = [];
+      var n = Math.min(160, Math.floor(cvs.width / 14));
+      for (var i = 0; i < n; i++) {
+        stars.push({
+          x: Math.random() * cvs.width,
+          y: Math.random() * cvs.height * 0.6,
+          r: Math.random() * 1.6 + 0.3,
+          t: Math.random() * 6.28,
+          s: Math.random() * 0.04 + 0.01
+        });
+      }
+    }
+    function draw() {
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+      for (var i = 0; i < stars.length; i++) {
+        var st = stars[i];
+        st.t += st.s;
+        var a = 0.4 + Math.sin(st.t) * 0.4;
+        ctx.beginPath();
+        ctx.arc(st.x, st.y, st.r, 0, 6.28);
+        ctx.fillStyle = "rgba(245,230,255," + a.toFixed(2) + ")";
+        ctx.fill();
+      }
+      if (!reduce) requestAnimationFrame(draw);
+    }
+    size();
+    draw();
+    window.addEventListener("resize", size);
+  })();
+
+  // scroll-reveal for the product cards
+  (function () {
+    var cards = document.querySelectorAll(".card");
+    if (!("IntersectionObserver" in window)) return;
+    cards.forEach(function (c) {
+      c.style.opacity = "0";
+      c.style.transition += ", opacity .6s ease";
+    });
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.style.opacity = "1"; io.unobserve(e.target); }
+      });
+    }, { threshold: 0.15 });
+    cards.forEach(function (c) { io.observe(c); });
+  })();
+</script>
