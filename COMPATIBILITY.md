@@ -13,10 +13,10 @@ All four products released `0.1.0` on 2026-07-12. What follows is keyed on those
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 | Product | Version | Maturity | Requires Python | Gate |
 |---|---|---|---|---|
-| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1028 passed / 16 skipped (`pytest`, offline) |
-| BrainConnect | 0.1.0 (tag `v0.1.2-rc1` — version/tag mismatch, see note below) | Release candidate | `>= 3.11` | 949 passed / 0 failed (`python3 tests/acceptance.py`) |
-| ComputeConnect | 0.1.0 | MVP (heterogeneity unproven) | `>= 3.11` | 132 passed, 144 collected (`pytest`, offline) |
-| ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 339 passed / 3 skipped, 342 collected (`pytest`, offline) |
+| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1042 passed / 11 skipped (`pytest`, offline) |
+| BrainConnect | 0.1.0 (tag `v0.1.2-rc1` — version/tag mismatch, see note below) | Release candidate | `>= 3.11` | 950 passed / 0 failed (`python3 tests/acceptance.py`) |
+| ComputeConnect | 0.1.0 | MVP (heterogeneity unproven) | `>= 3.11` | 136 passed, 137 collected (`pytest`, offline) |
+| ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 342 passed / 3 skipped, 345 collected (`pytest`, offline) |
 
 ComputeConnect's offline gate excludes 11 real-engine tests that require a live llama.cpp on
 `:8080`; 9 of those currently fail only because the host model was renamed
