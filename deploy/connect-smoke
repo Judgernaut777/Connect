@@ -1,18 +1,37 @@
 #!/usr/bin/env bash
-# connect-smoke — one real cross-product interaction across all four Connect services.
+# connect-smoke — one real cross-product interaction across all four Connect services,
+# end to end over the compose network.
 #
-# Proves the ecosystem is wired, not just individually up:
+# Proves the ecosystem is wired, not just individually up. Full sequence:
+#
+#   0. mint an AgentConnect operator token          (operator action, inside the container)
 #   1. AgentConnect captures a memory candidate  -> BrainConnect (the ledger)
-#   2. a human promotes it in BrainConnect        (the human-only trust gate)
+#   2. a human promotes it in BrainConnect           (the human-only trust gate)
 #   3. AgentConnect RECALLS it back               -> the trusted claim returns via AC
-#   4. AgentConnect authorizes a tool             -> ToolConnect (allow), and a write is DENIED
-#   5. AgentConnect places an inference request   -> ComputeConnect (a real placement decision)
+#   4. AgentConnect authorizes a tool             -> ToolConnect contract 1.0 (allow),
+#                                                     a write is DENIED
+#   5. ToolConnect contract 1.1 PER-CALL grant    -> authorize WITH args issues a
+#                                                     one-use grant, the grant is redeemed
+#                                                     once (allowed), and a SECOND redeem
+#                                                     of the same grant is DENIED (replay)
+#   6. AgentConnect places an inference request   -> ComputeConnect (a placement decision)
+#   7. ComputeConnect runs REAL generation        -> POST /generate; real text comes back
+#                                                     (or a well-formed refusal when no
+#                                                     compliant engine is reachable — still
+#                                                     a real, terminal decision)
+#   8. AgentConnect records the output as a real artifact on a real task, then reads it
+#      back via GET /artifacts/{id}/chunk to prove the round trip
+#   9. AgentConnect captures the outcome          -> BrainConnect, closing the loop as a
+#      new PENDING candidate (capture never promotes directly — that stays the
+#      human-only gate exercised at step 2)
 #
-# Steps 1/3/5 are genuinely AgentConnect-orchestrated cross-product calls over the
-# compose network. Steps 2 and 4 drive BrainConnect/ToolConnect directly to exercise
-# the human gate and the decision API. The AgentConnect->ToolConnect *governor* path
+# Steps 1, 3, 6 and 9 are genuinely AgentConnect-orchestrated cross-product calls over the
+# compose network; step 8 is AgentConnect's own task/artifact store. Steps 2, 4, 5 and 7
+# drive BrainConnect / ToolConnect / ComputeConnect directly to exercise the human gate,
+# the governor's decision API (both contract 1.0 and the 1.1 per-call grant), and real
+# inference. The AgentConnect->ToolConnect *governor chokepoint on a dispatched subtask*
 # (a subtask being blocked before a worker spawns) is proven separately by
-# mcp-agentconnect/examples/demo_governor_chokepoint.py.
+# deploy/connect-agent-gate and by mcp-agentconnect/examples/demo_governor_chokepoint.py.
 #
 # The operator bearer token for AgentConnect's HTTP API is minted inside the
 # agentconnect container (`agentconnect tokens issue`) — an operator action.
@@ -36,7 +55,12 @@ CT="Content-Type: application/json"
 pass=0; fail=0
 ok()  { echo "  PASS $1"; pass=$((pass+1)); }
 bad() { echo "  FAIL $1"; fail=$((fail+1)); }
-jq() { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null; }
+jq() { python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+v = ($1)
+print('' if v is None else v)
+" 2>/dev/null; }
 
 echo "== Connect ecosystem smoke =="
 
@@ -69,28 +93,80 @@ REC=$(curl -fsS -X POST "$AC_URL/memory/recall" "${AAUTH[@]}" -H "$CT" \
 TRUSTED=$(printf '%s' "$REC" | jq "any(i.get('trusted') for i in d.get('items',[]))")
 if [ "$TRUSTED" = "True" ]; then ok "recalled the human-promoted trusted claim"; else bad "recall did not return trusted claim: $REC"; fi
 
-# --- 4. AgentConnect authorizes a tool via ToolConnect -----------------------------
-echo "[4] tool authorization via ToolConnect"
+# --- 4. AgentConnect authorizes a tool via ToolConnect (contract 1.0 shape) --------
+echo "[4] tool authorization via ToolConnect (contract 1.0: no args)"
 tcauth=(); [ -n "$TC_TOKEN" ] && tcauth=(-H "Authorization: Bearer $TC_TOKEN")
 S=connect_smoke_harness
-curl -fsS -X POST "$TC_URL/sources" "${tcauth[@]}" -H "$CT" \
-  -d "{\"source_id\":\"$S\",\"tier\":\"known\",\"transport\":\"push\",\"declares\":[\"read_notes\",\"del_notes\"]}" >/dev/null
-curl -fsS -X POST "$TC_URL/sources/$S/tools" "${tcauth[@]}" -H "$CT" \
-  -d '{"tools":[{"name":"read_notes","claimed":{"read_only_hint":true}},{"name":"del_notes","claimed":{"destructive_hint":true}}]}' >/dev/null
-curl -fsS -X POST "$TC_URL/assertions" "${tcauth[@]}" -H "$CT" \
-  -d "{\"source_id\":\"$S\",\"name\":\"read_notes\",\"descriptor\":{\"effect\":\"read\",\"asserted_by\":\"operator\"}}" >/dev/null
-curl -fsS -X POST "$TC_URL/assertions" "${tcauth[@]}" -H "$CT" \
-  -d "{\"source_id\":\"$S\",\"name\":\"del_notes\",\"descriptor\":{\"effect\":\"write\",\"reversible\":false,\"asserted_by\":\"operator\"}}" >/dev/null
+PRINCIPAL='{"id":"connect-smoke","privacy_tier":"local","kind":"agent"}'
+tc_setup() {
+  # A ToolConnect setup call: fail loudly (not silently) if it errors, so a
+  # broken register/assert step is attributed to itself instead of surfacing
+  # three calls later as an opaque "unexpected decisions" failure.
+  local desc="$1" url="$2"; shift 2
+  if ! curl -fsS -X POST "$url" "$@" >/dev/null; then
+    bad "ToolConnect setup failed ($desc): POST $url"
+    echo "SUMMARY pass=$pass fail=$fail"
+    exit 1
+  fi
+}
+tc_setup "register source $S" "$TC_URL/sources" "${tcauth[@]}" -H "$CT" \
+  -d "{\"source_id\":\"$S\",\"tier\":\"known\",\"transport\":\"push\",\"declares\":[\"read_notes\",\"del_notes\"]}"
+tc_setup "register tools on $S" "$TC_URL/sources/$S/tools" "${tcauth[@]}" -H "$CT" \
+  -d '{"tools":[{"name":"read_notes","claimed":{"read_only_hint":true}},{"name":"del_notes","claimed":{"destructive_hint":true}}]}'
+tc_setup "assert read_notes" "$TC_URL/assertions" "${tcauth[@]}" -H "$CT" \
+  -d "{\"source_id\":\"$S\",\"name\":\"read_notes\",\"descriptor\":{\"effect\":\"read\",\"asserted_by\":\"operator\"}}"
+# del_notes is asserted as an EXTERNAL-SINK write: effect=write with an `external`-classified
+# write scope, which the descriptor derives into is_external_sink. That places it outside every
+# permit in the deployed policies.cedar — including the operator `local-manager-generate-write`
+# widen, which permits local write tools only when !external_sink — so it lands on Cedar's
+# default-deny. Asserting it as a plain non-sensitive write would now be *allowed* by that widen
+# (the policy the connect-agent-gate managed-work path depends on); the smoke's "a dangerous tool
+# is denied" case must be a shape no permit covers, not a shape one deployment happens to widen.
+tc_setup "assert del_notes" "$TC_URL/assertions" "${tcauth[@]}" -H "$CT" \
+  -d "{\"source_id\":\"$S\",\"name\":\"del_notes\",\"descriptor\":{\"effect\":\"write\",\"writes\":[\"external\"],\"reversible\":false,\"asserted_by\":\"operator\"}}"
 ALLOW=$(curl -fsS -X POST "$TC_URL/authorize" "${tcauth[@]}" -H "$CT" \
-  -d "{\"principal\":{\"id\":\"connect-smoke\",\"privacy_tier\":\"local\",\"kind\":\"agent\"},\"source_id\":\"$S\",\"name\":\"read_notes\"}")
+  -d "{\"principal\":$PRINCIPAL,\"source_id\":\"$S\",\"name\":\"read_notes\"}")
 DENY=$(curl -fsS -X POST "$TC_URL/authorize" "${tcauth[@]}" -H "$CT" \
-  -d "{\"principal\":{\"id\":\"connect-smoke\",\"privacy_tier\":\"local\",\"kind\":\"agent\"},\"source_id\":\"$S\",\"name\":\"del_notes\"}")
+  -d "{\"principal\":$PRINCIPAL,\"source_id\":\"$S\",\"name\":\"del_notes\"}")
 A=$(printf '%s' "$ALLOW" | jq "d.get('allowed')"); D=$(printf '%s' "$DENY" | jq "d.get('allowed')")
 CV=$(printf '%s' "$ALLOW" | jq "d.get('contract_version')")
 if [ "$A" = "True" ] && [ "$D" = "False" ]; then ok "read allowed, write denied (contract $CV)"; else bad "unexpected decisions allow=$A deny=$D"; fi
 
-# --- 5. AgentConnect places on ComputeConnect --------------------------------------
-echo "[5] placement decision from ComputeConnect"
+# --- 5. ToolConnect contract 1.1: argument-bound one-use grant ---------------------
+echo "[5] ToolConnect per-call grant (contract 1.1: authorize WITH args -> redeem -> replay denied)"
+GARGS='{"note_id":"connect-smoke-1"}'
+GRANT_RESP=$(curl -fsS -X POST "$TC_URL/authorize" "${tcauth[@]}" -H "$CT" \
+  -d "{\"principal\":$PRINCIPAL,\"source_id\":\"$S\",\"name\":\"read_notes\",\"args\":$GARGS,\"ttl_seconds\":60}")
+GALLOWED=$(printf '%s' "$GRANT_RESP" | jq "d.get('allowed')")
+GRANT_ID=$(printf '%s' "$GRANT_RESP" | jq "(d.get('grant') or {}).get('grant_id')")
+GCV=$(printf '%s' "$GRANT_RESP" | jq "d.get('contract_version')")
+if [ "$GALLOWED" = "True" ] && [ -n "${GRANT_ID:-}" ]; then
+  ok "authorize(args=...) allowed and issued grant $GRANT_ID (contract $GCV)"
+else
+  bad "expected an allow with a grant key for read_notes+args: $GRANT_RESP"
+fi
+
+if [ -n "${GRANT_ID:-}" ]; then
+  REDEEM1=$(curl -fsS -X POST "$TC_URL/grants/$GRANT_ID/redeem" "${tcauth[@]}" -H "$CT" \
+    -d "{\"principal\":$PRINCIPAL,\"args\":$GARGS}")
+  R1=$(printf '%s' "$REDEEM1" | jq "d.get('redeemed')")
+  if [ "$R1" = "True" ]; then ok "first redeem succeeded (same args, same principal)"; else bad "first redeem was denied: $REDEEM1"; fi
+
+  REDEEM2=$(curl -fsS -X POST "$TC_URL/grants/$GRANT_ID/redeem" "${tcauth[@]}" -H "$CT" \
+    -d "{\"principal\":$PRINCIPAL,\"args\":$GARGS}")
+  R2=$(printf '%s' "$REDEEM2" | jq "d.get('redeemed')")
+  R2REASON=$(printf '%s' "$REDEEM2" | jq "d.get('reason')")
+  if [ "$R2" = "False" ] && [ "$R2REASON" = "already_redeemed" ]; then
+    ok "second redeem of the SAME grant was denied (reason=already_redeemed) — one-use enforced"
+  else
+    bad "expected the replayed redeem to be denied as already_redeemed: $REDEEM2"
+  fi
+else
+  bad "no grant_id from step 5's authorize call — cannot exercise redeem/replay"
+fi
+
+# --- 6. AgentConnect places on ComputeConnect (placement decision) ------------------
+echo "[6] placement decision from ComputeConnect"
 ccauth=(); [ -n "$CC_TOKEN" ] && ccauth=(-H "Authorization: Bearer $CC_TOKEN")
 EST=$(curl -fsS -X POST "$CC_URL/route/estimate" "${ccauth[@]}" -H "$CT" -d '{"prompt":"health check","max_tokens":16}')
 ELIG=$(printf '%s' "$EST" | jq "d.get('eligible')")
@@ -102,6 +178,99 @@ elif [ -n "$ELIG" ]; then
   ok "ComputeConnect returned a placement decision (eligible=$ELIG, reason=$RCODE — expected 'degraded' when no local engine is reachable)"
 else
   bad "no placement decision from ComputeConnect: $EST"
+fi
+
+# --- 7. ComputeConnect REAL generation (not just a placement decision) -------------
+echo "[7] ComputeConnect real generation (POST /generate)"
+GEN_PROMPT="In one sentence, name the four Connect products."
+GEN=$(curl -fsS -m 180 -X POST "$CC_URL/generate" "${ccauth[@]}" -H "$CT" \
+  -d "{\"task_type\":\"chat\",\"prompt\":\"$GEN_PROMPT\",\"max_output_tokens\":64,\"privacy_tier\":\"local\"}")
+GSTATUS=$(printf '%s' "$GEN" | jq "d.get('status')")
+GOUTPUT=$(printf '%s' "$GEN" | jq "d.get('output','')")
+GMODEL=$(printf '%s' "$GEN" | jq "d.get('model')")
+GRUNID=$(printf '%s' "$GEN" | jq "d.get('run_id')")
+GREASON=$(printf '%s' "$GEN" | jq "(d.get('refusal') or {}).get('code','')")
+case "$GSTATUS" in
+  succeeded)
+    NONEMPTY=$(printf '%s' "$GEN" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+out=(d.get('output') or '').strip()
+print(bool(out) and out != '''$GEN_PROMPT'''.strip())
+" 2>/dev/null)
+    if [ "$NONEMPTY" = "True" ]; then
+      ok "real generation succeeded on model=$GMODEL (run_id=$GRUNID)"
+      echo "  ---- real generated text ----"
+      printf '%s\n' "$GOUTPUT" | sed 's/^/  | /'
+      echo "  ------------------------------"
+    else
+      bad "generation reported succeeded but output is empty or just echoes the prompt: $GEN"
+    fi
+    ;;
+  refused|failed|cancelled)
+    ok "ComputeConnect returned a real terminal decision (status=$GSTATUS, reason=${GREASON:-n/a} — expected when no compliant engine is reachable)"
+    ;;
+  *)
+    bad "no recognized terminal status (succeeded|failed|cancelled|refused) from ComputeConnect /generate: $GEN"
+    ;;
+esac
+if [ "$GSTATUS" = "succeeded" ] && [ -n "${GOUTPUT:-}" ]; then
+  ARTIFACT_TEXT="$GOUTPUT"
+else
+  ARTIFACT_TEXT="ComputeConnect /generate did not produce text this run (status=${GSTATUS:-none}, reason=${GREASON:-n/a})."
+fi
+
+# --- 8. AgentConnect records the output as a real artifact -------------------------
+echo "[8] AgentConnect records the output as a real artifact"
+TASK=$(curl -fsS -X POST "$AC_URL/tasks" "${AAUTH[@]}" -H "$CT" \
+  -d '{"title":"connect-smoke end-to-end","goal":"capture -> promote -> recall -> grant -> generate -> artifact -> capture, over the compose network"}')
+TASK_ID=$(printf '%s' "$TASK" | jq "d.get('id')")
+if [ -z "${TASK_ID:-}" ]; then
+  bad "could not create AgentConnect task: $TASK"
+else
+  ok "created task $TASK_ID"
+  ART_BODY=$(python3 -c "
+import json, sys
+print(json.dumps({
+    'type': 'worker_output',
+    'content': sys.argv[1],
+    'summary': 'connect-smoke: ComputeConnect /generate output',
+    'created_by': 'connect-smoke',
+    'metadata': {'run_id': sys.argv[2], 'model': sys.argv[3], 'generate_status': sys.argv[4]},
+}))
+" "$ARTIFACT_TEXT" "${GRUNID:-none}" "${GMODEL:-none}" "${GSTATUS:-none}")
+  ART=$(curl -fsS -X POST "$AC_URL/tasks/$TASK_ID/artifacts" "${AAUTH[@]}" -H "$CT" -d "$ART_BODY")
+  ART_ID=$(printf '%s' "$ART" | jq "d.get('id')")
+  ART_TYPE=$(printf '%s' "$ART" | jq "d.get('type')")
+  if [ -n "${ART_ID:-}" ] && [ "$ART_TYPE" = "worker_output" ]; then
+    ok "artifact $ART_ID recorded (type=worker_output)"
+    CHUNK=$(curl -fsS "$AC_URL/artifacts/$ART_ID/chunk" "${AAUTH[@]}")
+    ROUNDTRIP=$(printf '%s' "$CHUNK" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(d.get('content', '') == '''$ARTIFACT_TEXT''')
+" 2>/dev/null)
+    if [ "$ROUNDTRIP" = "True" ]; then
+      ok "artifact content round-trips byte-for-byte via GET /artifacts/$ART_ID/chunk"
+    else
+      bad "artifact chunk content did not match what was written: $CHUNK"
+    fi
+  else
+    bad "artifact create failed or returned an unexpected type: $ART"
+  fi
+fi
+
+# --- 9. AgentConnect captures the outcome -> BrainConnect (closes the loop) --------
+echo "[9] AgentConnect captures the outcome -> BrainConnect (PENDING only, closes the loop)"
+CAP2=$(curl -fsS -X POST "$AC_URL/memory/capture" "${AAUTH[@]}" -H "$CT" \
+  -d "{\"text\":\"connect-smoke: ComputeConnect generation (status=${GSTATUS:-none}) recorded as AgentConnect artifact ${ART_ID:-none} on task ${TASK_ID:-none}\",\"origin_actor_id\":\"connect-smoke\",\"tags\":[\"outcome\"],\"task_id\":\"${TASK_ID:-}\"}")
+CID2=$(printf '%s' "$CAP2" | jq "d.get('candidate_id')")
+BK2=$(printf '%s' "$CAP2" | jq "d.get('backend')")
+ST2=$(printf '%s' "$CAP2" | jq "d.get('status')")
+if [ -n "${CID2:-}" ] && [ "$BK2" = "brainconnect" ] && [ "$ST2" = "pending" ]; then
+  ok "closing capture $CID2 recorded in BrainConnect as pending (never auto-promoted — step 2's gate is the only promotion path)"
+else
+  bad "closing capture failed or was not pending: $CAP2"
 fi
 
 echo "== SUMMARY: pass=$pass fail=$fail =="

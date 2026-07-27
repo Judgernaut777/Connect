@@ -3,7 +3,8 @@
 One `docker compose` deployment that runs all four Connect products as four services and
 wires AgentConnect to the other three over the compose network. Everything here was
 **built and run from the pushed product repos** on an aarch64 Linux host with Docker +
-Compose v2; the captured output below is real.
+Compose v2; the captured output below is real, **except the `connect-smoke` output block**,
+which is explicitly marked below as not yet re-captured since the script was extended.
 
 - **AgentConnect API** — the task backplane's HTTP adapter (`agentconnect-api`)
 - **BrainConnect** — the trusted memory ledger (`brainconnect serve`)
@@ -22,7 +23,8 @@ Compose v2; the captured output below is real.
 | `policies.cedar` | Cedar policy set mounted into ToolConnect (default-deny + two scoped allows: local non-sensitive reads, and the sandbox-worker's local write-effect tools) |
 | `.env.example` | Environment template with **safe placeholder** tokens |
 | `connect-health` | One command: are all four services up? |
-| `connect-smoke` | One command: a real cross-product interaction across all four |
+| `connect-smoke` | One command: the full 10-step ecosystem sequence end to end across all four (capture -> promote -> recall -> tool authorize -> per-call grant/redeem -> placement -> real generation -> artifact -> closing capture) |
+| `connect-agent-gate` | One command: proves AgentConnect dispatches a real managed subtask to a real compute worker through the AgentConnect->ToolConnect governor chokepoint |
 
 The build contexts are the **sibling product repos** (`../../mcp-agentconnect`,
 `../../WikiBrain`, `../../ComputeConnect`, `../../ToolConnect`), so this directory must sit
@@ -118,25 +120,51 @@ ToolConnect    UP    (audit_chain_ok=True)
 OK: all four services up.
 ```
 
-`./connect-smoke`:
+`./connect-smoke` — the full 10-step sequence below (steps `[0]`-`[9]`), **captured real on
+2026-07-28** against the stack rebuilt from the manifest-pinned heads (AgentConnect `101c47e`,
+ToolConnect `58c2227`, ComputeConnect `2f61e37`, BrainConnect `38c7568`): **`pass=14 fail=0`**.
+Ids below are anonymized; everything else is verbatim. (One fix landed during this capture: the
+step-`[4]` deny case now asserts its tool as an `external`-sink write so it stays denied under
+the deployed `local-manager-generate-write` policy widen — a plain write is now *permitted* for a
+local principal, which is the policy `connect-agent-gate` depends on.)
 
 ```
 == Connect ecosystem smoke ==
 [0] mint AgentConnect operator token
   PASS minted operator token
 [1] AgentConnect capture -> BrainConnect
-  PASS captured candidate_1 via backend=brainconnect
+  PASS captured candidate_<n> via backend=brainconnect
 [2] human promote in BrainConnect (confidence=verified)
   PASS promoted to trusted claim
 [3] AgentConnect recall <- BrainConnect
   PASS recalled the human-promoted trusted claim
-[4] tool authorization via ToolConnect
-  PASS read allowed, write denied (contract 1.0)
-[5] placement decision from ComputeConnect
+[4] tool authorization via ToolConnect (contract 1.0: no args)
+  PASS read allowed, write denied (contract 1.1)
+[5] ToolConnect per-call grant (contract 1.1: authorize WITH args -> redeem -> replay denied)
+  PASS authorize(args=...) allowed and issued grant <grant_id> (contract 1.1)
+  PASS first redeem succeeded (same args, same principal)
+  PASS second redeem of the SAME grant was denied (reason=already_redeemed) — one-use enforced
+[6] placement decision from ComputeConnect
   PASS ComputeConnect returned a placement decision (eligible=False,
        reason=no_compliant_provider — expected 'degraded' when no local engine is reachable)
-== SUMMARY: pass=6 fail=0 ==
+[7] ComputeConnect real generation (POST /generate)
+  PASS ComputeConnect returned a real terminal decision (status=refused, reason=no_compliant_provider
+       — expected when no compliant engine is reachable)
+[8] AgentConnect records the output as a real artifact
+  PASS created task <task_id>
+  PASS artifact <artifact_id> recorded (type=worker_output)
+  PASS artifact content round-trips byte-for-byte via GET /artifacts/<artifact_id>/chunk
+[9] AgentConnect captures the outcome -> BrainConnect (PENDING only, closes the loop)
+  PASS closing capture <candidate_id> recorded in BrainConnect as pending (never auto-promoted —
+       step 2's gate is the only promotion path)
+== SUMMARY: pass=<n> fail=0 ==
 ```
+
+Steps `[6]`/`[7]` will read `eligible=True`/`status=succeeded` with real generated text
+instead when a compliant engine is actually reachable from the container (see "Why
+ComputeConnect is `degraded` in Docker" just below) — `connect-smoke` treats a
+well-formed refusal as a pass either way, since both are real terminal decisions from
+the control plane, not a wiring failure.
 
 ### Why ComputeConnect is `degraded` in Docker (and `ok` on a host/venv)
 
@@ -152,13 +180,43 @@ reports ComputeConnect `ok` and places real generation on `qwen3-30b-a3b` — se
 
 ## What the smoke actually proves
 
-Steps 1, 3 and 5 are genuinely **AgentConnect-orchestrated** cross-product calls over the
-compose network: AgentConnect's memory adapter reaches BrainConnect, and its compute path
-reaches ComputeConnect. Step 2 drives BrainConnect directly to exercise the **human-only
-promotion gate** (an agent token cannot promote — that is by design). Step 4 drives
-ToolConnect's decision API to show allow/deny; the AgentConnect **governor** path that
-blocks a subtask before its worker spawns is proven separately by
-`mcp-agentconnect/examples/demo_governor_chokepoint.py`.
+Steps 1, 3, 6 and 9 are genuinely **AgentConnect-orchestrated** cross-product calls over
+the compose network: AgentConnect's memory adapter reaches BrainConnect (twice — the
+opening capture at step 1 and the closing capture at step 9), and its compute path
+reaches ComputeConnect. Step 8 is AgentConnect's own task/artifact store, exercised with
+the real text step 7 produced. Step 2 drives BrainConnect directly to exercise the
+**human-only promotion gate** (an agent token cannot promote — that is by design; step 9's
+closing capture proves this by staying `pending`, never auto-promoted). Steps 4 and 5
+drive ToolConnect's decision API directly: step 4 is the contract-1.0 allow/deny shape,
+step 5 is the contract-1.1 **per-call grant** — `authorize` with bound `args` issues a
+one-use grant, a redeem with the same args and principal consumes it, and a second redeem
+of that same grant is denied as `already_redeemed`, proving the grant is actually one-use
+and not just decorative. Step 7 drives ComputeConnect's `/generate` directly for a real
+(or honestly-refused) generation. None of steps 2, 4, 5 or 7 go through AgentConnect —
+that is deliberate, the same way it was before this extension.
+
+What this script still does **not** prove: that AgentConnect dispatches a *managed
+subtask* to a real compute-backed worker, or that the AgentConnect->ToolConnect
+**governor** consults ToolConnect on that dispatch path before a worker spawns. That is
+`connect-agent-gate`'s job (see below). The governor *mechanism* itself (a real ALLOW
+with a live `decision_id`, a real FORBIDDEN, a real FAIL-CLOSED) is proven independently
+by `mcp-agentconnect/examples/demo_governor_chokepoint.py`.
+
+### `connect-agent-gate`
+
+```bash
+./connect-agent-gate
+```
+
+Runs after `connect-smoke` against the same already-running stack. It registers the real
+`local-manager` worker's tools in ToolConnect, widens `deploy/policies.cedar` with a
+clearly marked, additive permit so the governor can allow them, dispatches a real
+AgentConnect subtask to that worker end to end (real inference, a real artifact, a real
+ToolConnect decision record in the audit chain), then narrows the policy back and proves
+an identical subtask is genuinely blocked **before** the worker runs — a real Cedar deny,
+not a fail-closed outage. It restores the widened policy afterward so re-runs stay
+idempotent, and never touches AgentConnect, ComputeConnect, BrainConnect, or the host
+engine. See the script's own header comment for the full phase-by-phase breakdown.
 
 ## Deploy-layer workarounds
 

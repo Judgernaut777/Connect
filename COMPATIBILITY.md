@@ -13,10 +13,10 @@ All four products released `0.1.0` on 2026-07-12. What follows is keyed on those
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 | Product | Version | Maturity | Requires Python | Gate |
 |---|---|---|---|---|
-| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1138 passed / 3 skipped, 1141 collected (`pytest`, offline) |
+| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1256 passed / 3 skipped, 1259 collected (`pytest`, offline) |
 | BrainConnect | 0.1.2rc1 (tag `v0.1.2-rc1`) | Release candidate | `>= 3.11` | 956 passed / 0 failed (`python3 tests/acceptance.py`) |
 | ComputeConnect | 0.1.0 | MVP (single-host heterogeneity proven 2026-07-27; cross-machine open) | `>= 3.11` | 143 passed (`pytest`, offline) |
-| ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 423 passed / 3 skipped (`pytest`, offline) |
+| ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 462 passed / 3 skipped (`pytest`, offline) |
 
 ComputeConnect's offline gate excludes 11 real-engine tests that require a live llama.cpp on
 `:8080`; they read their expected model ids from `CC_REAL_MODEL` / `CC_REAL_MODEL_B`, so the
@@ -51,7 +51,7 @@ Phase-5 integration run on 2026-07-12 (real HTTP or MCP stdio, not an in-process
 | 0.1.0 | BrainConnect | 0.1.0 | HTTP `:8787` (bearer token) | ✅ | Capture, quarantine-on-injection, human-only promotion, nested refusal envelope, recall into a context pack |
 | 0.1.0 | ComputeConnect | 0.1.0 | HTTP `:8090` (six routes) | ✅ | Real llama.cpp streaming generation, mid-stream cancel, CA-1 default-deny, CA-3 `run_id` |
 | 0.1.0 | ToolConnect | 0.1.0 | HTTP `:8095` + MCP stdio | ✅ | Fail-closed `ToolConnectGovernor` in `agentconnect-core`: contract `1.1` — argument-bound one-use grants authorized+redeemed at the final invocation boundary of every side-effecting tool call (pre-spawn toolset check retained as early filter) |
-| 0.1.0 | all three | 0.1.0 | composed (Docker) | ✅ | Four-service Compose stack builds + comes up healthy; `connect-smoke` passes 6/6 (see [deploy/](deploy/)) |
+| 0.1.0 | all three | 0.1.0 | composed (Docker) | ✅ | Four-service Compose stack builds + comes up healthy; `connect-smoke` runs a 10-step cross-product sequence — see [deploy/README.md](deploy/README.md) for the current re-capture status |
 
 The ToolConnect row is now ✅: `agentconnect-core` ships the `ToolConnectGovernor`, verified
 end-to-end this cycle. See [note 2](#2-agentconnect--toolconnect--first-class-fail-closed-governor-shipped).
@@ -66,6 +66,11 @@ captured output live in [deploy/README.md](deploy/README.md).
 ## The contracts
 
 Cross-product surface is expressed as an interface in `agentconnect-core`, never as shared code.
+
+<!-- BEGIN generated:contracts (source: manifest/ecosystem.yaml — do not hand-edit) -->
+Contract versions currently pinned by the manifest: `memory_adapter` `1.0`,
+`local_compute_provider` `1.0`, `toolconnect_governor` `1.1`.
+<!-- END generated:contracts -->
 
 ### MemoryAdapter — AgentConnect ↔ BrainConnect
 

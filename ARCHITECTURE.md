@@ -8,9 +8,27 @@ promise (e.g. heterogeneous compute) is not yet proven. That distinction is load
 the Phase-5 diagrams, two former dashed edges are now solid: the ToolConnect governor ships in
 `agentconnect-core` and is env-wired (`AGENTCONNECT_TOOLCONNECT_URL`), and ComputeConnect
 registration is declarative (`AGENTCONNECT_COMPUTE_URL`). The whole four-service stack now runs
-from [deploy/](deploy/) and passes a cross-product smoke; see [deploy/README.md](deploy/README.md).
+from [deploy/](deploy/) and ships a 10-step cross-product smoke; see
+[deploy/README.md](deploy/README.md) for what it exercises and its current re-capture status
+(the sequence was extended for ToolConnect contract 1.1 on 2026-07-28 and has not yet been
+re-run against a rebuilt stack).
 
 ---
+
+## Five planes, one platform
+
+Read what follows as four **infrastructure planes** — Work (AgentConnect), Knowledge
+(BrainConnect), Capability (ToolConnect), Compute (ComputeConnect) — with Connect itself as a
+fifth, thinner **Platform Management Plane**: it holds the manifest and the deploy bundle, but it
+runs no workloads, holds no trust, decides no authorization, and places no compute. See
+[README.md#five-planes-one-platform](README.md#five-planes-one-platform) for the plane-to-product
+table. The "Owns / Delegates" table below is the same division stated as engineering boundaries
+rather than plane names — same idea, sharper edges: **AgentConnect controls access; BrainConnect
+controls trust; ComputeConnect decides where; ToolConnect decides whether.** None of the four is
+uniformly production-grade — two are release candidates, two are MVP — and the diagrams below
+mark what each specific scenario proved (solid) versus left open (dashed) rather than asserting
+readiness the planes framing alone might imply; where a later result changed the picture, the
+prose beneath the diagram says so.
 
 ## The pieces
 
@@ -18,7 +36,7 @@ from [deploy/](deploy/) and passes a cross-product smoke; see [deploy/README.md]
 |---|---|---|---|
 | **AgentConnect** | Task/artifact/decision/review/handoff ledger, routing, model tiering, worker runtime, workspaces and scoped tokens, audit. Both cross-product contracts. | Durable workflows to Temporal, issues to Linear, protocol to the official MCP SDK, inference to whatever implements `LocalComputeProvider` | Release candidate |
 | **BrainConnect** | Trust, provenance, scope, promotion and supersession of claims. The human gate. | Search sophistication to a pluggable retrieval backend; secret and injection detection to third-party engines | Release candidate |
-| **ComputeConnect** | Compute-provider registry, placement policy, health, execution metadata, structural privacy filtering | Inference itself — it never loads a tensor; engine lifecycle stays with the engine | MVP (heterogeneity unproven) |
+| **ComputeConnect** | Compute-provider registry, placement policy, health, execution metadata, structural privacy filtering | Inference itself — it never loads a tensor; engine lifecycle stays with the engine | MVP (single-host heterogeneity proven 2026-07-27; cross-machine open) |
 | **ToolConnect** | Protocol-neutral tool registry, asserted governance metadata, policy decisions, health, authorization records, audit | Tool description and transport to MCP; in-path proxying to existing gateways | MVP service |
 
 The division is deliberate. **AgentConnect controls access; BrainConnect controls trust.**
@@ -105,9 +123,12 @@ flowchart TD
 ```
 
 The runtime is real: six `LocalComputeProvider` routes, an OpenAI-compatible layer, streaming with
-mid-stream cancel, and structural default-deny privacy filtering. **The heterogeneity premise is
-unproven** — the only real provider on this host is the local llama.cpp engine; the second is
-simulated (drawn dashed for exactly that reason).
+mid-stream cancel, and structural default-deny privacy filtering. This diagram's own cloud
+provider is simulated (drawn dashed for exactly that reason). **Single-host heterogeneity across
+two real, materially different engines is proven separately** — a 35B MoE engine and a 4B dense
+engine, both real, with preference-driven selection and capacity-forced placement (ComputeConnect's
+`docs/validation/heterogeneity-2026-07-27.md`, 2026-07-27). What remains open is **cross-machine**
+placement — a genuinely different remote node, not just a second local engine.
 
 ### ToolConnect alone ✅ (MVP service)
 
@@ -188,7 +209,8 @@ flowchart TD
 
 Now solid: `agentconnect-core` ships the `ToolConnectGovernor`, env-wired via
 `AGENTCONNECT_TOOLCONNECT_URL`, consulted as a real chokepoint and fail-closed. Verified this cycle
-(allow read / deny write, contract `1.0`, subtask blocked before spawn); originally exercised at
+(allow read / deny write, contract `1.1` — argument-bound one-use grants redeemed at the final
+invocation boundary, with the pre-spawn subtask block retained as an early filter); originally exercised at
 ToolConnect's decision API in Scenario 4: Verified in Scenario 4: real MCP stdio ingest of a three-tool server,
 authorize-denies-before-assertion then permit/forbid after, fail-closed on a duplicate identity and
 on post-assertion drift (invocability revoked), and a verifiable audit chain. What is missing is a
@@ -227,13 +249,22 @@ What Scenario 5 actually proved, honestly:
   (`authority_trusted=true`), and a new candidate was captured back. Real HTTP. Solid.
 - **AgentConnect → ComputeConnect.** A subtask was placed on the real `qwen3-30b-a3b` engine via a
   local-manager worker, with route explanation and worker output recorded in the ledger. Solid —
-  but the *cloud alternative it could route to is simulated*, so heterogeneity is still unproven.
+  but *in this composed flow* the cloud alternative it could route to is simulated. (Single-host
+  heterogeneity across two real, materially different engines is proven separately as of
+  2026-07-27 — see the note under the diagram below — just not yet through this same
+  AgentConnect-orchestrated path.)
 - **AgentConnect → ToolConnect.** Now via the shipped fail-closed `ToolConnectGovernor`
-  (`AGENTCONNECT_TOOLCONNECT_URL`): a read tool allowed, a write tool denied, contract `1.0`, and a
-  denied tool blocks the subtask before its worker spawns. Solid.
+  (`AGENTCONNECT_TOOLCONNECT_URL`): a read tool allowed, a write tool denied, contract `1.1`
+  (argument-bound one-use grants authorized+redeemed per call), and a denied tool blocks the
+  subtask before its worker spawns. Solid.
 - The whole thing ran inside a managed session, the audit **passed**, and the operator — not the
   agent — marked the task `succeeded`.
 
-One dashed edge remains: heterogeneous compute — it becomes solid only when a real second compute
-provider replaces the simulated one. The four-service stack is now reproducible from
-[deploy/](deploy/) (`docker compose up` → `connect-health` → `connect-smoke`, 6/6).
+One dashed edge remains *in this composed flow*: the cloud provider drawn here is simulated.
+Single-host heterogeneity across two genuinely different real engines is now proven separately
+(ComputeConnect's `docs/validation/heterogeneity-2026-07-27.md`, 2026-07-27) — but that
+validation exercised ComputeConnect directly, not through this AgentConnect-orchestrated
+Scenario-5 flow, so the edge above stays dashed until a real second provider (local or
+cross-machine) is placed on via this same path. The four-service stack is now reproducible from
+[deploy/](deploy/) (`docker compose up` → `connect-health` → `connect-smoke`, a 10-step
+sequence — see [deploy/README.md](deploy/README.md) for current re-capture status).
