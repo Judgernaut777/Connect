@@ -22,7 +22,7 @@ are minimum-viable but real, with limitations named below rather than smoothed o
 |---|---|---|---|---|
 | **AgentConnect** | 0.1.0 | Release candidate | Task, artifact, decision, review, routing, and handoff backplane for coding agents | [AgentConnect](https://github.com/Judgernaut777/AgentConnect) |
 | **BrainConnect** | 0.1.0 | Release candidate | Human-gated trusted memory ledger | [BrainConnect](https://github.com/Judgernaut777/BrainConnect) |
-| **ComputeConnect** | 0.1.0 | MVP (heterogeneity unproven) | Local-compute provider / control plane | [ComputeConnect](https://github.com/Judgernaut777/ComputeConnect) |
+| **ComputeConnect** | 0.1.0 | MVP (single-host heterogeneity proven 2026-07-27; cross-machine open) | Local-compute provider / control plane | [ComputeConnect](https://github.com/Judgernaut777/ComputeConnect) |
 | **ToolConnect** | 0.1.0 | MVP service | Tool-governance decision point | [ToolConnect](https://github.com/Judgernaut777/ToolConnect) |
 
 Every product is installable, runs standalone, and ships an Apache-2.0 `LICENSE` and `NOTICE`
@@ -30,8 +30,8 @@ at its repository root and inside every wheel.
 
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 Test gates, from the ecosystem manifest:
-AgentConnect **1081 passed / 3 skipped** (1084 collected), BrainConnect **956 passed / 0
-failed**, ComputeConnect **143 passed** (offline gate), ToolConnect **342 passed / 3
+AgentConnect **1138 passed / 3 skipped** (1141 collected), BrainConnect **956 passed / 0
+failed**, ComputeConnect **143 passed** (offline gate), ToolConnect **423 passed / 3
 skipped**.
 
 ComputeConnect's 11 real-engine tests are excluded from that offline count — they need a live
@@ -132,12 +132,13 @@ default-deny privacy filtering. Verified this cycle streaming real generation fr
 llama.cpp engine and cancelling it mid-stream, driven by AgentConnect's shipped
 `HttpLocalComputeProvider` client.
 
-**Honest limitation — heterogeneity is unproven.** ComputeConnect's premise is routing across
-*heterogeneous* compute. On this single accelerator-less ARM host there is exactly one real
-provider (the local llama.cpp engine); the second provider is **simulated**. The routing and
-privacy machinery is real and tested, but the value proposition — placing work across genuinely
-different hardware — has not been demonstrated on real second hardware. Its own `docs/STATUS.md`
-records this and treats "should this exist as a separate product" as an open question.
+**Honest status — single-host heterogeneity proven; cross-machine open.** ComputeConnect's
+premise is routing across *heterogeneous* compute. As of 2026-07-27 that is proven for the
+single-host case: two real, materially different engines (35B MoE / 16k ctx and 4B dense /
+8k ctx) with preference-driven selection, capacity-forced placement, and real generation from
+both — see ComputeConnect's `docs/validation/heterogeneity-2026-07-27.md`. What remains open is
+placement across genuinely different *machines* (a GPU-class remote node); its `docs/STATUS.md`
+tracks that as the next step.
 
 **Works independently.** It conforms to AgentConnect's `LocalComputeProvider` contract, defined
 in `agentconnect.core.local_compute`, and needs nothing else installed to run.
@@ -245,8 +246,8 @@ Read this before depending on anything here. The honest, per-product state:
   bypass stays fixed under independent retest.
 - **BrainConnect — release candidate.** HTTP serve is new this cycle; the rename is done in
   code except for the `brain_*` MCP tool names and the `~/.wiki-brain/` data directory.
-- **ComputeConnect — MVP.** Runtime is real; **heterogeneous compute is unproven** because
-  the only second provider on this host is simulated.
+- **ComputeConnect — MVP.** Runtime is real; **single-host two-engine heterogeneity is proven**
+  (2026-07-27); cross-machine placement remains open.
 - **ToolConnect — MVP service.** Runtime is real; still no tool execution by design, and the
   protocol-neutral claim is only partially proven.
 
@@ -256,10 +257,12 @@ Ecosystem-level status, stated plainly:
   (`pip install brainconnect-ai`); the import package and console command stay `brainconnect`.
   The old `brainconnect` collision is no longer a publication blocker. Do **not** `pip install
   brainconnect` bare — that is an unrelated third-party package.
-- **AgentConnect ↔ ToolConnect — first-class client shipped.** `agentconnect-core` now carries a
-  fail-closed `ToolConnectGovernor` that AgentConnect consults as a real chokepoint (a denied tool
-  blocks a subtask before its worker spawns). Verified end-to-end against a live `toolconnect serve`
-  (allow a read tool, deny a write tool, contract `1.0`).
+- **AgentConnect ↔ ToolConnect — enforcement at the final invocation boundary.** `agentconnect-core`
+  carries a fail-closed `ToolConnectGovernor`; as of contract **`1.1`** (2026-07-27) authorization
+  binds the exact final arguments of every side-effecting tool call: authorize issues a one-use
+  argument-bound grant, the act loop redeems it immediately before executing the same frozen
+  arguments, and any deny/outage/redeem failure refuses execution. The earlier pre-spawn toolset
+  check remains as a cheap early filter, not the enforcement point.
 - **ComputeConnect wiring — declarative.** Registering ComputeConnect as an AgentConnect worker is
   now driven by `AGENTCONNECT_COMPUTE_URL` (or `config/compute.yaml`); the `local-manager` worker
   appears in `GET /health` when configured. Verified in the Compose stack.

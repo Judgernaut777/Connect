@@ -13,15 +13,15 @@ All four products released `0.1.0` on 2026-07-12. What follows is keyed on those
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 | Product | Version | Maturity | Requires Python | Gate |
 |---|---|---|---|---|
-| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1081 passed / 3 skipped, 1084 collected (`pytest`, offline) |
+| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1138 passed / 3 skipped, 1141 collected (`pytest`, offline) |
 | BrainConnect | 0.1.2rc1 (tag `v0.1.2-rc1`) | Release candidate | `>= 3.11` | 956 passed / 0 failed (`python3 tests/acceptance.py`) |
-| ComputeConnect | 0.1.0 | MVP (heterogeneity unproven) | `>= 3.11` | 143 passed (`pytest`, offline) |
-| ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 342 passed / 3 skipped (`pytest`, offline) |
+| ComputeConnect | 0.1.0 | MVP (single-host heterogeneity proven 2026-07-27; cross-machine open) | `>= 3.11` | 143 passed (`pytest`, offline) |
+| ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 423 passed / 3 skipped (`pytest`, offline) |
 
 ComputeConnect's offline gate excludes 11 real-engine tests that require a live llama.cpp on
 `:8080`; they read their expected model ids from `CC_REAL_MODEL` / `CC_REAL_MODEL_B`, so the
 2026-07-17 failures caused by the host model rename (`qwen3-30b-a3b` → `qwen3.6-35b-a3b`)
-are fixed (last live run: 149 passed / 5 skipped). BrainConnect's package version now matches
+are fixed (last live run with both engines up: 154 passed / 0 skipped). BrainConnect's package version now matches
 its tag: the long-standing `0.1.0`-package / `v0.1.2-rc1`-tag mismatch recorded in
 [manifest/ecosystem.yaml](manifest/ecosystem.yaml) was closed on 2026-07-27.
 <!-- END generated:tests -->
@@ -50,7 +50,7 @@ Phase-5 integration run on 2026-07-12 (real HTTP or MCP stdio, not an in-process
 | 0.1.0 | — | — | in-process + managed shell | ✅ | Full task loop driving a real `claude -p`; managed session cannot complete its own task |
 | 0.1.0 | BrainConnect | 0.1.0 | HTTP `:8787` (bearer token) | ✅ | Capture, quarantine-on-injection, human-only promotion, nested refusal envelope, recall into a context pack |
 | 0.1.0 | ComputeConnect | 0.1.0 | HTTP `:8090` (six routes) | ✅ | Real llama.cpp streaming generation, mid-stream cancel, CA-1 default-deny, CA-3 `run_id` |
-| 0.1.0 | ToolConnect | 0.1.0 | HTTP `:8095` + MCP stdio | ✅ | Fail-closed `ToolConnectGovernor` in `agentconnect-core`: allow read / deny write, contract `1.0`, subtask blocked before worker spawn |
+| 0.1.0 | ToolConnect | 0.1.0 | HTTP `:8095` + MCP stdio | ✅ | Fail-closed `ToolConnectGovernor` in `agentconnect-core`: contract `1.1` — argument-bound one-use grants authorized+redeemed at the final invocation boundary of every side-effecting tool call (pre-spawn toolset check retained as early filter) |
 | 0.1.0 | all three | 0.1.0 | composed (Docker) | ✅ | Four-service Compose stack builds + comes up healthy; `connect-smoke` passes 6/6 (see [deploy/](deploy/)) |
 
 The ToolConnect row is now ✅: `agentconnect-core` ships the `ToolConnectGovernor`, verified
@@ -109,17 +109,19 @@ Cross-product surface is expressed as an interface in `agentconnect-core`, never
 
 - ToolConnect defines its own HTTP surface (its `docs/SERVICE.md`, pinned by
   `docs/AGENTCONNECT_CONTRACT.md`). `POST /authorize` returns a Decision carrying
-  `contract_version` (currently **`1.0`**), `allowed`, `decision_id`, `reason`,
-  `determining_policies`, and `default_deny`; the caller executes the tool and closes the loop
-  via `POST /decisions/{id}/outcome`. There is **no invocation route** — ToolConnect decides, it
-  does not execute.
+  `contract_version` (currently **`1.1`**), `allowed`, `decision_id`, `reason`,
+  `determining_policies`, and `default_deny`; when the request binds `args`, a permit also
+  carries a **one-use argument-bound grant** which the caller redeems via
+  `POST /grants/{id}/redeem` immediately before executing, then closes the loop via
+  `POST /decisions/{id}/outcome` (with `grant_id`). There is still **no invocation route** —
+  ToolConnect decides, it does not execute.
 - **AgentConnect ships a first-class client.** `agentconnect-core`'s `ToolConnectGovernor`
-  (bound via `AGENTCONNECT_TOOLCONNECT_URL` / `_TOKEN` / `_MODE`) consults `/authorize` and is
-  **fail-closed**: an unreachable point, an unasserted tool, or an unrecognised contract **major**
-  all deny. A denied tool blocks the subtask before the worker spawns. Verified this cycle: read
-  allowed (`permitted by local-reads`), write denied (`default deny: no policy matched`), contract
-  `1.0`; `deploy/connect-smoke` exercises it and `examples/demo_governor_chokepoint.py` proves the
-  subtask-block. See [note 2](#2-agentconnect--toolconnect--first-class-fail-closed-governor-shipped).
+  (bound via `AGENTCONNECT_TOOLCONNECT_URL` / `_TOKEN` / `_MODE`) is **fail-closed**: an
+  unreachable point, an unasserted tool, an unrecognised contract **major**, a missing grant, or
+  a failed redemption all deny. As of contract `1.1` the enforcement point is the **final
+  invocation boundary**: the act loop authorizes the exact final arguments, redeems the grant,
+  and executes the same frozen mapping — the pre-spawn toolset check is retained only as a cheap
+  early filter. See [note 2](#2-agentconnect--toolconnect--first-class-fail-closed-governor-shipped).
 
 ### Observability event model — AgentConnect
 
@@ -227,23 +229,26 @@ The names `agentconnect-*`, `computeconnect`, and `toolconnect` are free on PyPI
 
 ### 2. AgentConnect ↔ ToolConnect — first-class fail-closed governor shipped
 
-`agentconnect-core` now ships a real `ToolConnectGovernor` client. AgentConnect consults it as a
-genuine chokepoint: a denied tool blocks a subtask **before** its worker spawns, and an unreachable
-decision point **denies** (fail-closed — the one place AgentConnect departs from "adapters fail
-open"). Verified end-to-end this cycle against a live `toolconnect serve`: a read tool is allowed,
-a write tool is denied, decisions carry contract version `1.0`, and the cross-product smoke in
-[deploy/connect-smoke](deploy/connect-smoke) exercises exactly this. See
-`mcp-agentconnect/examples/demo_governor_chokepoint.py` for the subtask-blocking proof.
+`agentconnect-core` ships a real `ToolConnectGovernor` client, and as of 2026-07-27 (contract
+`1.1`) the chokepoint sits at the **final invocation boundary**, not just worker dispatch:
+authorize binds the exact final arguments of each side-effecting tool call and issues a one-use
+grant; the act loop redeems it and executes the same frozen arguments; any deny, outage, missing
+grant, or failed redemption refuses execution (fail-closed — the one place AgentConnect departs
+from "adapters fail open"). The earlier subtask-block-before-spawn behavior is retained as an
+early filter; `deploy/connect-smoke` and `examples/demo_governor_chokepoint.py` still exercise
+it. ToolConnect's ADR 0002 and AgentConnect's ADR 0009 record the design.
 
-### 3. ComputeConnect heterogeneity is unproven; the second provider is simulated
+### 3. ComputeConnect: single-host heterogeneity proven; cross-machine open
 
-ComputeConnect's runtime is real, but on this single accelerator-less ARM host only one provider
-(the local llama.cpp engine) is real; the second is a **simulated** cloud provider. The routing
-and privacy machinery is exercised, but placement across genuinely heterogeneous hardware is
-**not demonstrated**. Registering ComputeConnect as an AgentConnect routing worker is now
-**declarative** — `AGENTCONNECT_COMPUTE_URL` (or `config/compute.yaml`) registers the
-`local-manager` worker, which then appears in AgentConnect's `GET /health`. Verified in the
-Compose stack; only the heterogeneity claim remains open.
+As of 2026-07-27, ComputeConnect has **proven single-host heterogeneous placement across two
+real engines** — 35B MoE / 16k ctx (`:8080`) and 4B dense / 8k ctx (`:8091`) — with
+preference-driven selection both directions, capacity-forced placement, and real generation from
+both (`ComputeConnect/docs/validation/heterogeneity-2026-07-27.md`; all five two-engine tests
+passed live, not skipped). The **cloud provider remains simulated** and the still-open claim is
+**cross-machine** placement (a GPU-class remote node). Registering ComputeConnect as an
+AgentConnect routing worker is **declarative** — `AGENTCONNECT_COMPUTE_URL` (or
+`config/compute.yaml`) registers the `local-manager` worker, which then appears in
+AgentConnect's `GET /health`. Verified in the Compose stack.
 
 ### 4. The BrainConnect rename keeps `brain_*` MCP tools and the `~/.wiki-brain/` data dir
 
