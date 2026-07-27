@@ -19,7 +19,7 @@ Compose v2; the captured output below is real.
 | `brainconnect.Dockerfile` | Installs `brainconnect-ai` from the BrainConnect (WikiBrain) repo |
 | `computeconnect.Dockerfile` | Installs `computeconnect` from the ComputeConnect repo |
 | `toolconnect.Dockerfile` | Installs `toolconnect` from the ToolConnect repo |
-| `policies.cedar` | Cedar policy set mounted into ToolConnect (default-deny + one safe allow) |
+| `policies.cedar` | Cedar policy set mounted into ToolConnect (default-deny + two scoped allows: local non-sensitive reads, and the sandbox-worker's local write-effect tools) |
 | `.env.example` | Environment template with **safe placeholder** tokens |
 | `connect-health` | One command: are all four services up? |
 | `connect-smoke` | One command: a real cross-product interaction across all four |

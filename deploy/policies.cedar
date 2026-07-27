@@ -34,3 +34,16 @@ forbid(
     principal.privacy_tier == "rented" &&
     resource.reads_sensitive
 };
+
+// The sandbox-worker's local-manager compute path (sandbox-worker/README.md) needs
+// its write-effect tools permitted so submit_subtask can reach real local inference.
+// Deliberately narrow: local tier only, never sensitive readers, never external sinks.
+// Not running the sandbox worker? Delete this block and restart toolconnect.
+@id("local-manager-generate-write")
+permit(principal, action == Action::"invoke", resource)
+when {
+    principal.privacy_tier == "local" &&
+    resource.effect == "write" &&
+    !resource.reads_sensitive &&
+    !resource.external_sink
+};
