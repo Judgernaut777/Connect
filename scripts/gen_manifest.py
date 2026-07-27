@@ -47,12 +47,32 @@ PRODUCTS: dict[str, dict] = {
     "agentconnect": {
         "repository": "Judgernaut777/AgentConnect",
         "local_dir": "../mcp-agentconnect",
-        "gate": {"kind": "pytest", "cwd": "."},
+        "gate": {
+            "kind": "pytest",
+            "cwd": ".",
+            "note": (
+                "Pass/skip counts are environment-dependent: sibling "
+                "BrainConnect/WikiBrain checkout, fascia-guard, "
+                "trufflehog/gitleaks binaries, and optional extras (litellm, "
+                "temporalio, langgraph-checkpoint-sqlite, detect-secrets) "
+                "each unlock more tests when present."
+            ),
+        },
     },
     "brainconnect": {
         "repository": "Judgernaut777/BrainConnect",
         "local_dir": "../WikiBrain",
-        "gate": {"kind": "acceptance", "cwd": ".", "script": "tests/acceptance.py"},
+        "gate": {
+            "kind": "acceptance",
+            "cwd": ".",
+            "script": "tests/acceptance.py",
+            "note": (
+                "Do not set a global BRAINCONNECT_DB when running this gate "
+                "-- it breaks per-check isolation. Check count varies with "
+                "optional extras (the mixed-model embeddings checks self-skip "
+                "without the [semantic] extra's numpy)."
+            ),
+        },
     },
     "computeconnect": {
         "repository": "Judgernaut777/ComputeConnect",
@@ -61,6 +81,12 @@ PRODUCTS: dict[str, dict] = {
             "kind": "pytest",
             "cwd": ".",
             "extra_args": ["--ignore=tests/test_real_engine.py"],
+            "note": (
+                "11 real-engine tests are excluded from the offline count; "
+                "they need a live llama.cpp on :8080 and read their expected "
+                "model ids from CC_REAL_MODEL / CC_REAL_MODEL_B (defaults "
+                "track the current host deployment)."
+            ),
         },
     },
     "toolconnect": {
@@ -141,8 +167,23 @@ def parse_pytest_counts(output: str) -> tuple[int | None, int | None, int | None
     return find("passed"), find("failed"), find("skipped")
 
 
-def run_pytest_gate(local_dir: Path, extra_args: list[str] | None) -> dict:
-    cmd = ["python3", "-m", "pytest", "-q", *(extra_args or [])]
+def gate_python(local_dir: Path) -> str:
+    """The sibling's own .venv interpreter when it has one, else python3.
+
+    Bare python3 only works where a combined all-products environment is on
+    PATH (the CI/cloud configuration); on a dev host each sibling carries its
+    deps in its own .venv and the system interpreter would fail collection.
+    """
+    venv_python = local_dir / ".venv" / "bin" / "python"
+    return str(venv_python) if venv_python.exists() else "python3"
+
+
+def run_pytest_gate(
+    local_dir: Path, extra_args: list[str] | None, note: str | None
+) -> dict:
+    # No -q here: siblings that set addopts = "-q" would end up at -qq, which
+    # suppresses the summary line entirely and leaves every count None.
+    cmd = [gate_python(local_dir), "-m", "pytest", *(extra_args or [])]
     proc = run(cmd, cwd=local_dir)
     output = proc.stdout + "\n" + proc.stderr
     collected = None
@@ -156,11 +197,32 @@ def run_pytest_gate(local_dir: Path, extra_args: list[str] | None) -> dict:
         "passed": passed,
         "failed": failed if failed is not None else 0,
         "skipped": skipped,
-        "note": None if proc.returncode == 0 else "gate exited non-zero; inspect output",
+        "note": note if proc.returncode == 0 else "gate exited non-zero; inspect output",
     }
 
 
-def run_acceptance_gate(local_dir: Path, script: str) -> dict:
+def read_package_version(local_dir: Path) -> str | None:
+    """[project].version from the sibling's pyproject.toml, or None.
+
+    The manifest claims to be the source of truth for package versions, so
+    refresh them from the checkout instead of preserving whatever was last
+    written -- preservation is how the BrainConnect tag/package mismatch
+    went unnoticed across two rc tags.
+    """
+    pyproject = local_dir / "pyproject.toml"
+    if not pyproject.exists():
+        return None
+    try:
+        import tomllib
+
+        data = tomllib.loads(pyproject.read_text())
+    except Exception:
+        return None
+    version = data.get("project", {}).get("version")
+    return str(version) if version is not None else None
+
+
+def run_acceptance_gate(local_dir: Path, script: str, note: str | None) -> dict:
     # Deliberately do NOT set a global BRAINCONNECT_DB here -- acceptance.py
     # manages its own per-check isolation and a global override breaks it.
     cmd = ["python3", script]
@@ -175,7 +237,7 @@ def run_acceptance_gate(local_dir: Path, script: str) -> dict:
         "passed": passed,
         "failed": failed if failed is not None else 0,
         "skipped": None,
-        "note": None if proc.returncode == 0 else "gate exited non-zero; inspect output",
+        "note": note if proc.returncode == 0 else "gate exited non-zero; inspect output",
     }
 
 
@@ -195,6 +257,9 @@ def refresh_product(
         entry["tag"] = tag
         entry["commits_since_tag"] = offset
 
+    package_version = read_package_version(local_dir)
+    if package_version is not None:
+        entry["package_version"] = package_version
     entry.setdefault("package_version", None)
     entry.setdefault("maturity", None)
     entry.setdefault("note", None)
@@ -204,9 +269,13 @@ def refresh_product(
     if run_gates and spec.get("gate"):
         gate = spec["gate"]
         if gate["kind"] == "pytest":
-            entry["tests"] = run_pytest_gate(local_dir, gate.get("extra_args"))
+            entry["tests"] = run_pytest_gate(
+                local_dir, gate.get("extra_args"), gate.get("note")
+            )
         elif gate["kind"] == "acceptance":
-            entry["tests"] = run_acceptance_gate(local_dir, gate["script"])
+            entry["tests"] = run_acceptance_gate(
+                local_dir, gate["script"], gate.get("note")
+            )
 
     return entry
 
