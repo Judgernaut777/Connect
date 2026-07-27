@@ -30,15 +30,16 @@ at its repository root and inside every wheel.
 
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 Test gates, from the ecosystem manifest:
-AgentConnect **1042 passed / 11 skipped**, BrainConnect **950 passed / 0 failed**,
-ComputeConnect **136 passed** (137 collected, offline gate), ToolConnect **342 passed / 3
-skipped** (345 collected).
+AgentConnect **1081 passed / 3 skipped** (1084 collected), BrainConnect **956 passed / 0
+failed**, ComputeConnect **143 passed** (offline gate), ToolConnect **342 passed / 3
+skipped**.
 
 ComputeConnect's 11 real-engine tests are excluded from that offline count — they need a live
-llama.cpp on `:8080`, and 9 of them currently fail only because the host model was renamed
-`qwen3-30b-a3b` → `qwen3.6-35b-a3b`, not because of a product bug. BrainConnect's
-`package_version` (`0.1.0`) has not yet been bumped to match its `v0.1.2-rc1` tag — recorded
-here truthfully, not smoothed over.
+llama.cpp on `:8080`. They now read their expected model ids from `CC_REAL_MODEL` /
+`CC_REAL_MODEL_B` (the 2026-07-17 failures caused by the host model rename
+`qwen3-30b-a3b` → `qwen3.6-35b-a3b` are fixed; last live run: 149 passed / 5 skipped).
+BrainConnect's package version is `0.1.2rc1`, matching its `v0.1.2-rc1` tag — the
+long-standing tag/package mismatch was closed on 2026-07-27.
 <!-- END generated:tests -->
 
 "Runtime exists" does not mean "production-ready." Read

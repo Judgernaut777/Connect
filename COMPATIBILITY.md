@@ -13,17 +13,17 @@ All four products released `0.1.0` on 2026-07-12. What follows is keyed on those
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 | Product | Version | Maturity | Requires Python | Gate |
 |---|---|---|---|---|
-| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1042 passed / 11 skipped (`pytest`, offline) |
-| BrainConnect | 0.1.0 (tag `v0.1.2-rc1` — version/tag mismatch, see note below) | Release candidate | `>= 3.11` | 950 passed / 0 failed (`python3 tests/acceptance.py`) |
-| ComputeConnect | 0.1.0 | MVP (heterogeneity unproven) | `>= 3.11` | 136 passed, 137 collected (`pytest`, offline) |
-| ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 342 passed / 3 skipped, 345 collected (`pytest`, offline) |
+| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1081 passed / 3 skipped, 1084 collected (`pytest`, offline) |
+| BrainConnect | 0.1.2rc1 (tag `v0.1.2-rc1`) | Release candidate | `>= 3.11` | 956 passed / 0 failed (`python3 tests/acceptance.py`) |
+| ComputeConnect | 0.1.0 | MVP (heterogeneity unproven) | `>= 3.11` | 143 passed (`pytest`, offline) |
+| ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 342 passed / 3 skipped (`pytest`, offline) |
 
 ComputeConnect's offline gate excludes 11 real-engine tests that require a live llama.cpp on
-`:8080`; 9 of those currently fail only because the host model was renamed
-`qwen3-30b-a3b` → `qwen3.6-35b-a3b`, not because of a product bug. BrainConnect's
-`pyproject` `package_version` (`0.1.0`) was never bumped to match its `v0.1.2-rc1` tag — both
-numbers are recorded truthfully in [manifest/ecosystem.yaml](manifest/ecosystem.yaml) rather than
-reconciled by fiat.
+`:8080`; they read their expected model ids from `CC_REAL_MODEL` / `CC_REAL_MODEL_B`, so the
+2026-07-17 failures caused by the host model rename (`qwen3-30b-a3b` → `qwen3.6-35b-a3b`)
+are fixed (last live run: 149 passed / 5 skipped). BrainConnect's package version now matches
+its tag: the long-standing `0.1.0`-package / `v0.1.2-rc1`-tag mismatch recorded in
+[manifest/ecosystem.yaml](manifest/ecosystem.yaml) was closed on 2026-07-27.
 <!-- END generated:tests -->
 
 AgentConnect's nine packages now all carry the same `0.1.0`, so "AgentConnect 0.1.0" names a
