@@ -107,7 +107,7 @@ tests, scripts, and MCP verification so they cannot touch your live `~/.wiki-bra
 
 ## ComputeConnect only
 
-**Requires Python ≥ 3.11. Maturity: MVP — heterogeneity unproven.**
+**Requires Python ≥ 3.11. Maturity: MVP (single-host heterogeneity proven 2026-07-27; cross-machine open).**
 
 ComputeConnect is a local-compute provider and control plane. It serves a model to a
 `LocalComputeProvider` client behind a placement and privacy policy.

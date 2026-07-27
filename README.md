@@ -13,25 +13,59 @@ installing, configuring, and using that specific product.
 
 Every product works independently. None requires another to be useful.
 
+## Five planes, one platform
+
+Connect is not five unrelated apps that happen to share a naming convention. It is a
+**Platform Management Plane** sitting over four infrastructure planes, each owned by exactly
+one product:
+
+| Plane | Product | Answers |
+|---|---|---|
+| **Work** | AgentConnect | What is being done, by which agent, under whose review, and is it recorded? |
+| **Knowledge** | BrainConnect | What is trusted, who promoted it, and under what scope? |
+| **Capability** | ToolConnect | Which tool may this principal call, and did the call get authorized? |
+| **Compute** | ComputeConnect | Where does this workload run, and does that placement respect privacy? |
+
+Connect itself — this repository — is the fifth plane, and it is deliberately the thinnest one.
+It runs no workloads, holds no trust, decides no authorization, and places no compute. It is the
+manifest, the deploy bundle, and the docs that keep the other four honest about what they claim —
+a **management plane**, not a fifth opinion competing with the other four for control.
+
+Read the table as infrastructure layers a coding-agent platform needs, not as an org chart. A
+single unit of agent work in AgentConnect's Work plane can reach into BrainConnect's Knowledge
+plane (capture/recall), ComputeConnect's Compute plane (placement), and ToolConnect's Capability
+plane (authorization) — each through one explicit, versioned contract (see
+[The contracts](COMPATIBILITY.md#the-contracts)), never through shared code or a shared database.
+[ARCHITECTURE.md](ARCHITECTURE.md) has the wiring diagrams; [Which product do I need?](#which-product-do-i-need)
+below has the plain-language version.
+
+**This framing does not imply uniform readiness.** The Work and Knowledge planes
+(AgentConnect, BrainConnect) are release candidates; the Capability and Compute planes
+(ToolConnect, ComputeConnect) are MVPs with named, open gaps — see
+[Maturity and known limitations](#maturity-and-known-limitations). A platform is only as strong
+as its least-mature plane, and right now that is Capability and Compute, not Work or Knowledge.
+
 ## Status at a glance
 
 All four products now have a runtime and a `0.1.0` release. Two are release candidates; two
 are minimum-viable but real, with limitations named below rather than smoothed over.
 
+<!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 | Product | Version | Maturity | What it is | Repository |
 |---|---|---|---|---|
 | **AgentConnect** | 0.1.0 | Release candidate | Task, artifact, decision, review, routing, and handoff backplane for coding agents | [AgentConnect](https://github.com/Judgernaut777/AgentConnect) |
-| **BrainConnect** | 0.1.0 | Release candidate | Human-gated trusted memory ledger | [BrainConnect](https://github.com/Judgernaut777/BrainConnect) |
+| **BrainConnect** | 0.1.2rc1 (tag `v0.1.2-rc1`) | Release candidate | Human-gated trusted memory ledger | [BrainConnect](https://github.com/Judgernaut777/BrainConnect) |
 | **ComputeConnect** | 0.1.0 | MVP (single-host heterogeneity proven 2026-07-27; cross-machine open) | Local-compute provider / control plane | [ComputeConnect](https://github.com/Judgernaut777/ComputeConnect) |
 | **ToolConnect** | 0.1.0 | MVP service | Tool-governance decision point | [ToolConnect](https://github.com/Judgernaut777/ToolConnect) |
+<!-- END generated:tests -->
 
 Every product is installable, runs standalone, and ships an Apache-2.0 `LICENSE` and `NOTICE`
 at its repository root and inside every wheel.
 
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 Test gates, from the ecosystem manifest:
-AgentConnect **1138 passed / 3 skipped** (1141 collected), BrainConnect **956 passed / 0
-failed**, ComputeConnect **143 passed** (offline gate), ToolConnect **423 passed / 3
+AgentConnect **1256 passed / 3 skipped** (1259 collected), BrainConnect **956 passed / 0
+failed**, ComputeConnect **143 passed** (offline gate), ToolConnect **462 passed / 3
 skipped**.
 
 ComputeConnect's 11 real-engine tests are excluded from that offline count — they need a live
@@ -41,6 +75,11 @@ llama.cpp on `:8080`. They now read their expected model ids from `CC_REAL_MODEL
 BrainConnect's package version is `0.1.2rc1`, matching its `v0.1.2-rc1` tag — the
 long-standing tag/package mismatch was closed on 2026-07-27.
 <!-- END generated:tests -->
+
+<!-- BEGIN generated:contracts (source: manifest/ecosystem.yaml — do not hand-edit) -->
+Cross-product contract versions, from the ecosystem manifest: `memory_adapter` `1.0`,
+`local_compute_provider` `1.0`, `toolconnect_governor` `1.1`.
+<!-- END generated:contracts -->
 
 "Runtime exists" does not mean "production-ready." Read
 [the maturity and known-limitations section](#maturity-and-known-limitations) before you
