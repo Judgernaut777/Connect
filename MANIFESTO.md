@@ -144,3 +144,10 @@ written down rather than smoothed over.
 - A god object that all four products import. Shared surface is contract, not code.
 - A security sandbox marketed as one without the isolation to back it.
 - A memory system in which an agent can decide what is true.
+- Paid tiers for organizational scale. Structure is *onboarding*, not *edition* — the same control
+  plane serves an individual and a multi-region company. We will not put departments, roles, policy
+  inheritance, or organizational size behind a separate SKU, a restricted edition, per-seat
+  licensing, or a "real" enterprise product a growing customer must migrate onto. Growth adds
+  structure in place; it never means a new deployment or handing Connect custody of organizational
+  data. This is *design direction* — no onboarding profiles ship yet — recorded here so the model is
+  built the right way from the start. See [docs/ORGANIZATION_MODEL.md](docs/ORGANIZATION_MODEL.md).
