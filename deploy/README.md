@@ -166,6 +166,32 @@ ComputeConnect is `degraded` in Docker" just below) — `connect-smoke` treats a
 well-formed refusal as a pass either way, since both are real terminal decisions from
 the control plane, not a wiring failure.
 
+### Shared event bus — captured cross-product proof (2026-07-29)
+
+With the bus wired (per-source publish tokens minted and set in `.env`, see
+[`../EVENT_BUS.md`](../EVENT_BUS.md)), the same `connect-smoke` run above drove three
+separate containers to publish their own domain events into AgentConnect's **one**
+`event_log` stream. Read back from that single stream, filtered by `source_product`:
+
+```
+$ curl -H "Authorization: Bearer <operator>" "$AC/events?since=<seq>&source_product=toolconnect"
+  2x tool.authorized                 # the two allowed reads (allow => no `outcome`)
+  1x tool.authorized  /denied        # the denied external-sink write
+  1x grant.issued
+  1x grant.redeemed
+$ ... &source_product=computeconnect
+  1x compute.generation.refused /denied
+$ ... &source_product=agentconnect
+  1x task.created   1x artifact.created   1x memory.captured   # native Work-plane events
+```
+
+Every event is stamped with the publishing product; a consumer selects only what it needs.
+The **anti-forgery** property was verified live in the same session: the ToolConnect-scoped
+publish token is **refused `403`** when it tries to publish as `source_product=agentconnect`,
+and accepted only for `source_product=toolconnect`. And the bus is **best-effort**: stopping
+AgentConnect leaves every ToolConnect decision and ComputeConnect placement byte-identical —
+the publishers degrade to no-ops, they never block or fail a request.
+
 ### Why ComputeConnect is `degraded` in Docker (and `ok` on a host/venv)
 
 ComputeConnect places work on an **external** engine. In this Compose stack it is pointed
