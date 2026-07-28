@@ -10,9 +10,9 @@ products:
   agentconnect:
     repository: "Judgernaut777/AgentConnect"
     local_dir: "../mcp-agentconnect"
-    commit: "101c47e6c703489392e0a5be89de25538985014b"
+    commit: "60d7a9ee701b38ba8a8e3b85ba21f845273c93c2"
     tag: "v0.1.0"
-    commits_since_tag: 20
+    commits_since_tag: 23
     package_version: "0.1.0"
     maturity: "release candidate"
     note: null
