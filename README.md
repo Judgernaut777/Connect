@@ -1,25 +1,28 @@
 # Connect
 
-**The Connect ecosystem is a self-hosted, privacy-first stack for running coding agents you can audit.**
+**Today, Connect is a self-hosted, privacy-first ecosystem of infrastructure planes for
+running coding agents you can audit. It is evolving into a free, open-source, zero-trust AI
+control plane for *making agents usable*.**
 
-> **Two things share the name "Connect," and this section keeps them apart.**
->
-> - **The target product** — *Connect is a free, open-source, easy-to-use, zero-trust AI
->   control plane for **making agents usable**.* It coordinates native harnesses, work,
->   memory, capabilities, compute, secure workspaces, organizations, flexible budgets, and a
->   neutral marketplace — without becoming the customer's host, data custodian, consultant, or
->   subscription vendor. This is where the ecosystem is going. The full statement is
->   [PRODUCT_THESIS.md](PRODUCT_THESIS.md); the marketplace and business model are
->   [MARKETPLACE_ARCHITECTURE.md](MARKETPLACE_ARCHITECTURE.md).
-> - **What ships today** — four standalone `0.1.0` products (below) plus *this* repository,
->   an integration-and-documentation umbrella. **The user-facing control-plane application,
->   the marketplace, the onboarding wizard, and the generalized budget engine do not exist
->   yet.** Where they are described anywhere in these docs, they are marked design direction.
->   Do not read the target product as a claim about current runtime.
->
-> The control-plane application may need its own repository; that is
-> [ADR 0002](docs/adr/0002-control-plane-repository-boundary.md), and no substantial
-> control-plane implementation begins until it is accepted.
+Both statements are true, and this repository keeps them apart on purpose:
+
+- **Today (current implementation).** Four standalone, self-hosted `0.1.0` products — the
+  Work, Knowledge, Capability, and Compute planes (below) — plus *this* repository, an
+  integration-and-documentation umbrella. Every product runs independently and is auditable.
+- **Target (where this is going).** One control plane that coordinates native harnesses, work,
+  memory, capabilities, compute, secure workspaces, organizations, flexible budgets, and a
+  neutral marketplace — **without** becoming the customer's host, data custodian, consultant,
+  or subscription vendor. The full statement is [PRODUCT_THESIS.md](PRODUCT_THESIS.md).
+
+> **The target is not built yet.** The user-facing control-plane application, the marketplace,
+> the onboarding wizard, and the generalized budget engine **do not exist**. Where they are
+> described in these docs they are marked *design direction* — do not read the target product
+> as a claim about current runtime. The control-plane application may need its own repository;
+> that is [ADR 0002](docs/adr/0002-control-plane-repository-boundary.md), which remains
+> **Proposed**, and no substantial control-plane implementation begins until it is accepted.
+
+New here? The [documentation index](docs/README.md) maps every current document by topic and
+labels each *current* or *target*.
 
 This repository ships no application or library code — no importable package, no service, no
 API. What it does ship: the [ecosystem manifest](manifest/ecosystem.yaml) (the pinned-commit
@@ -34,9 +37,9 @@ Every product works independently. None requires another to be useful.
 
 ## Five planes, one platform
 
-Connect is not five unrelated apps that happen to share a naming convention. It is a
-**Platform Management Plane** sitting over four infrastructure planes, each owned by exactly
-one product:
+Connect is not five unrelated apps that happen to share a naming convention. It is the
+**Control plane** — a deliberately thin management plane — sitting over four infrastructure
+planes, each owned by exactly one product:
 
 | Plane | Product | Answers |
 |---|---|---|
@@ -45,10 +48,12 @@ one product:
 | **Capability** | ToolConnect | Which tool may this principal call, and did the call get authorized? |
 | **Compute** | ComputeConnect | Where does this workload run, and does that placement respect privacy? |
 
-Connect itself — this repository — is the fifth plane, and it is deliberately the thinnest one.
-It runs no workloads, holds no trust, decides no authorization, and places no compute. It is the
-manifest, the deploy bundle, and the docs that keep the other four honest about what they claim —
-a **management plane**, not a fifth opinion competing with the other four for control.
+Connect itself — this repository — is the fifth plane, the **Control plane**, and it is
+deliberately the thinnest one. It runs no workloads, holds no trust, decides no authorization,
+and places no compute. Today it is the manifest, the deploy bundle, and the docs that keep the
+other four honest about what they claim; the target control-plane application
+([PRODUCT_THESIS.md](PRODUCT_THESIS.md)) coordinates the four without becoming a fifth opinion
+competing with them for control. Either way it stays a thin coordinator, never a fifth authority.
 
 Read the table as infrastructure layers a coding-agent platform needs, not as an org chart. A
 single unit of agent work in AgentConnect's Work plane can reach into BrainConnect's Knowledge
@@ -271,6 +276,8 @@ and passes a real cross-product smoke test.
 
 | Document | Read it for |
 |---|---|
+| **[docs/README.md](docs/README.md)** | **The documentation index** — every current document by topic, each labeled *current* or *target*. Start here. |
+| **[DOCUMENTATION_CORRECTION_REPORT.md](DOCUMENTATION_CORRECTION_REPORT.md)** | The audit trail: what the documentation-correction effort changed, and why |
 | **[PRODUCT_THESIS.md](PRODUCT_THESIS.md)** | The canonical product — *making agents usable* — and current state vs target (design direction) |
 | **[MARKETPLACE_ARCHITECTURE.md](MARKETPLACE_ARCHITECTURE.md)** | The marketplace and the entire business model: categories, metadata, neutral sorting, verification, fees (design direction) |
 | **[DATA_AND_COMPLIANCE_BOUNDARIES.md](DATA_AND_COMPLIANCE_BOUNDARIES.md)** | The component-level data matrix and what compliance enablement is (and is not) |
