@@ -13,10 +13,10 @@ All four products released `0.1.0` on 2026-07-12. What follows is keyed on those
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 | Product | Version | Maturity | Requires Python | Gate |
 |---|---|---|---|---|
-| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1256 passed / 3 skipped, 1259 collected (`pytest`, offline) |
+| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1288 passed / 3 skipped, 1291 collected (`pytest`, offline) |
 | BrainConnect | 0.1.2rc1 (tag `v0.1.2-rc1`) | Release candidate | `>= 3.11` | 956 passed / 0 failed (`python3 tests/acceptance.py`) |
-| ComputeConnect | 0.1.0 | MVP (single-host heterogeneity proven 2026-07-27; cross-machine open) | `>= 3.11` | 143 passed (`pytest`, offline) |
-| ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 462 passed / 3 skipped (`pytest`, offline) |
+| ComputeConnect | 0.1.0 | MVP (single-host heterogeneity proven 2026-07-27; cross-machine open) | `>= 3.11` | 155 passed (`pytest`, offline) |
+| ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 485 passed / 3 skipped (`pytest`, offline) |
 
 ComputeConnect's offline gate excludes 11 real-engine tests that require a live llama.cpp on
 `:8080`; they read their expected model ids from `CC_REAL_MODEL` / `CC_REAL_MODEL_B`, so the
