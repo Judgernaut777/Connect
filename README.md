@@ -248,6 +248,7 @@ and passes a real cross-product smoke test.
 | **[GETTING_STARTED.md](GETTING_STARTED.md)** | Per-product quickstarts, standalone |
 | **[COMBINED_INSTALL.md](COMBINED_INSTALL.md)** | Two-product recipes and the full four-product install |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | How the products interact, with deployment diagrams |
+| **[docs/ORGANIZATION_MODEL.md](docs/ORGANIZATION_MODEL.md)** | Organization-aware onboarding — how one control plane scales from an individual to a company by adding structure, not switching editions (design direction) |
 | **[COMPATIBILITY.md](COMPATIBILITY.md)** | 0.1.0 version matrix, Python floors, port registry, contracts, known gaps |
 | **[CONTRIBUTING.md](CONTRIBUTING.md)** | What belongs in this repository and what does not |
 | **[manifest/ecosystem.yaml](manifest/ecosystem.yaml)** | The ecosystem source of truth / lockfile: pinned commits, tags, package and contract versions, test gate counts |
