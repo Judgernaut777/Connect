@@ -213,8 +213,9 @@ Now solid: `agentconnect-core` ships the `ToolConnectGovernor`, env-wired via
 invocation boundary, with the pre-spawn subtask block retained as an early filter); originally exercised at
 ToolConnect's decision API in Scenario 4: Verified in Scenario 4: real MCP stdio ingest of a three-tool server,
 authorize-denies-before-assertion then permit/forbid after, fail-closed on a duplicate identity and
-on post-assertion drift (invocability revoked), and a verifiable audit chain. What is missing is a
-first-class AgentConnect ToolConnect client.
+on post-assertion drift (invocability revoked), and a verifiable audit chain. The `ToolConnectGovernor`
+in `agentconnect-core` **is** that first-class client; the earlier "no shipped client" caveat is
+closed as of contract `1.1`.
 
 ---
 

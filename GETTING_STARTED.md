@@ -126,10 +126,11 @@ It implements `GET /health`, `GET /models`, `GET /models/loaded`, `POST /route/e
 `/generate` defaults to the **most restrictive** privacy tier when none is given (CA-1), and a
 `run_id` is echoed as `X-Run-Id` and is cancellable (CA-3).
 
-**Know before you build on it:** on a single-node host the runtime is real but the *second* provider
-is **simulated**. Placement across genuinely heterogeneous hardware has not been demonstrated.
-ComputeConnect also never manages an engine's lifecycle — it consumes the local llama.cpp engine on
-`:8080` **read-only**. Read its `docs/STATUS.md` before proposing work.
+**Know before you build on it:** the runtime is real and **single-host** heterogeneity is proven
+(2026-07-27: two materially different real engines with preference-driven placement). Placement
+across genuinely different *machines* (a GPU-class remote node) is still open. ComputeConnect also
+never manages an engine's lifecycle — it consumes the local llama.cpp engine on `:8080` **read-only**.
+Read its `docs/STATUS.md` before proposing work.
 
 ---
 
