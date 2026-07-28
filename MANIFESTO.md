@@ -121,10 +121,11 @@ place a reader would look for it.
 Three examples, all currently stated in the products' own docs and in
 [COMPATIBILITY.md](COMPATIBILITY.md#known-gaps):
 
-- ComputeConnect: the runtime is real, but on this single-node host the *second* provider is
-  **simulated**. So the product is called an MVP whose heterogeneity is unproven — not a
-  finished compute fabric. A tested privacy filter is not the same as demonstrated placement
-  across real hardware.
+- ComputeConnect: the runtime is real, and as of 2026-07-27 **single-host** heterogeneity is
+  proven — two materially different real engines with preference-driven placement. It is still
+  called an MVP because placement across genuinely different *machines* (a GPU-class remote
+  node) remains open, so it is not yet a finished compute fabric. The proven claim and the open
+  one are stated in the same breath, neither dropped to flatter the product.
 - Publishing: the bare PyPI name `brainconnect` is taken by an unrelated package, so BrainConnect
   publishes as **`brainconnect-ai`** while keeping `brainconnect` as its import package and command.
   This was a release blocker; it is resolved. We still say plainly, everywhere a reader installs,
@@ -151,3 +152,31 @@ written down rather than smoothed over.
   structure in place; it never means a new deployment or handing Connect custody of organizational
   data. This is *design direction* — no onboarding profiles ship yet — recorded here so the model is
   built the right way from the start. See [docs/ORGANIZATION_MODEL.md](docs/ORGANIZATION_MODEL.md).
+- **Subscriptions of any kind.** No individual, team, or enterprise subscription; no per-seat
+  licensing; no feature-gated edition. A customer can run a complete Connect environment for free
+  on their own hardware, models, tools, and existing subscriptions. The free path is never
+  intentionally degraded to push anyone toward paying.
+- **A professional-services business.** No consulting, deployment, migration, security-review, or
+  training packages sold by Connect. Services a customer needs come from independent marketplace
+  vendors. Connect is a product and control plane, not a consulting organization.
+- **Hosting, inference, compute, or data custody.** Connect is not a hosting provider, a GPU cloud,
+  an inference host, a managed-memory host, a hosted-workspace operator, or a data custodian.
+  Hosting is a *primary marketplace category*; independent vendors provide it. Connect facilitates
+  discovery, comparison, setup, transactions, policy, and budgets — it does not become the thing
+  it lists.
+- **Charging for what the customer already owns.** No fee for using a customer's own computer, GPU,
+  server, or local model; for attaching an existing API key, subscription, or contract; for an
+  externally purchased service; for self-hosting; or for a free or open-source marketplace listing.
+  A transaction fee applies only when Connect *actually facilitates a paid marketplace transaction*.
+  Vendor verification fees buy an evaluation, never a favorable outcome, ranking, or wording.
+- **A centralized behavioral profile.** Connect provides neutral sorting, filtering, and structured
+  metadata — not a central profile that decides what a customer should buy. Personalization belongs
+  to the customer's own agent, operating on customer-controlled context.
+
+  These refusals are the whole of the business model. Their positive form — the marketplace,
+  the fees that are permitted, and the data boundaries — is
+  [MARKETPLACE_ARCHITECTURE.md](MARKETPLACE_ARCHITECTURE.md),
+  [DATA_AND_COMPLIANCE_BOUNDARIES.md](DATA_AND_COMPLIANCE_BOUNDARIES.md), and
+  [TRANSPARENCY.md](TRANSPARENCY.md). Like the organizational-scale entry above, they are
+  *design direction*: the marketplace and control-plane application do not ship yet, and this is
+  recorded so they are built the right way from the start.

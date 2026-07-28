@@ -67,9 +67,10 @@ Describe each by its actual maturity and name its limitations in the same breath
 - **Release candidate** (AgentConnect, BrainConnect today): describe the working feature, and
   still name the known gaps where a reader would look.
 - **MVP** (ComputeConnect, ToolConnect today): describe what runs, then state what makes it an
-  MVP. ComputeConnect's heterogeneity is unproven because its second provider is simulated;
-  ToolConnect has no tool execution by design and its protocol-neutral claim is only partially
-  proven. Neither of those sentences may be dropped to make the product sound finished.
+  MVP. ComputeConnect proved single-host heterogeneity (2026-07-27) but cross-*machine*
+  placement is still open; ToolConnect has no tool execution by design and its protocol-neutral
+  claim is only partially proven. Neither of those open items may be dropped to make the product
+  sound finished.
 
 Never let a design document, a charter, or a green in-process test be quoted as though it were a
 verified, shipped capability. The failure mode this rule exists to prevent is subtle: a charter
