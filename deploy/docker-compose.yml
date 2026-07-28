@@ -51,6 +51,12 @@ services:
     image: connect/toolconnect:0.1.0
     environment:
       TOOLCONNECT_AUTH_TOKEN: ${TOOLCONNECT_AUTH_TOKEN:?set TOOLCONNECT_AUTH_TOKEN in .env}
+      # Shared event bus (best-effort projection): when both are set, ToolConnect
+      # publishes capability.* events to AgentConnect's ingress. Unset => disabled
+      # no-op; a down bus never affects a decision. The token is a per-source publish
+      # token minted by `agentconnect tokens publish --source-product toolconnect`.
+      TOOLCONNECT_BUS_URL: ${TOOLCONNECT_BUS_URL:-}
+      TOOLCONNECT_BUS_TOKEN: ${TOOLCONNECT_BUS_TOKEN:-}
     volumes:
       - toolconnect-data:/data
       - ./policies.cedar:/etc/toolconnect/policy.cedar:ro
@@ -80,6 +86,11 @@ services:
     environment:
       COMPUTECONNECT_UPSTREAM: ${COMPUTECONNECT_UPSTREAM:-http://host.docker.internal:8080}
       COMPUTECONNECT_TOKEN: ${COMPUTECONNECT_TOKEN:-}
+      # Shared event bus (best-effort projection): when both are set, ComputeConnect
+      # publishes compute.* events to AgentConnect's ingress. Unset => disabled no-op.
+      # Token minted by `agentconnect tokens publish --source-product computeconnect`.
+      COMPUTECONNECT_BUS_URL: ${COMPUTECONNECT_BUS_URL:-}
+      COMPUTECONNECT_BUS_TOKEN: ${COMPUTECONNECT_BUS_TOKEN:-}
     extra_hosts:
       # Lets the container reach a host-run engine on Linux. If that engine binds the
       # host loopback only, it stays unreachable and ComputeConnect reports "degraded".
