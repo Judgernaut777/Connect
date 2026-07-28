@@ -39,6 +39,14 @@ plane (authorization) — each through one explicit, versioned contract (see
 [ARCHITECTURE.md](ARCHITECTURE.md) has the wiring diagrams; [Which product do I need?](#which-product-do-i-need)
 below has the plain-language version.
 
+The planes communicate two ways: **synchronously** through the explicit versioned contracts
+above (a unit of work calls memory, compute, and tool authorization directly), and
+**asynchronously** through a shared, best-effort [event bus](EVENT_BUS.md) — one append-only
+stream every plane can publish to and replay, for observability and debugging without adding
+point-to-point coupling. The bus is a *projection, never a system of record*: a plane that
+can't reach it keeps working unchanged, so it loosens coupling rather than creating a new
+central dependency.
+
 **This framing does not imply uniform readiness.** The Work and Knowledge planes
 (AgentConnect, BrainConnect) are release candidates; the Capability and Compute planes
 (ToolConnect, ComputeConnect) are MVPs with named, open gaps — see
@@ -64,8 +72,8 @@ at its repository root and inside every wheel.
 
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 Test gates, from the ecosystem manifest:
-AgentConnect **1256 passed / 3 skipped** (1259 collected), BrainConnect **956 passed / 0
-failed**, ComputeConnect **143 passed** (offline gate), ToolConnect **462 passed / 3
+AgentConnect **1288 passed / 3 skipped** (1291 collected), BrainConnect **956 passed / 0
+failed**, ComputeConnect **155 passed** (offline gate), ToolConnect **485 passed / 3
 skipped**.
 
 ComputeConnect's 11 real-engine tests are excluded from that offline count — they need a live
