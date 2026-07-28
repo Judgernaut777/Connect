@@ -2,6 +2,25 @@
 
 **The Connect ecosystem is a self-hosted, privacy-first stack for running coding agents you can audit.**
 
+> **Two things share the name "Connect," and this section keeps them apart.**
+>
+> - **The target product** — *Connect is a free, open-source, easy-to-use, zero-trust AI
+>   control plane for **making agents usable**.* It coordinates native harnesses, work,
+>   memory, capabilities, compute, secure workspaces, organizations, flexible budgets, and a
+>   neutral marketplace — without becoming the customer's host, data custodian, consultant, or
+>   subscription vendor. This is where the ecosystem is going. The full statement is
+>   [PRODUCT_THESIS.md](PRODUCT_THESIS.md); the marketplace and business model are
+>   [MARKETPLACE_ARCHITECTURE.md](MARKETPLACE_ARCHITECTURE.md).
+> - **What ships today** — four standalone `0.1.0` products (below) plus *this* repository,
+>   an integration-and-documentation umbrella. **The user-facing control-plane application,
+>   the marketplace, the onboarding wizard, and the generalized budget engine do not exist
+>   yet.** Where they are described anywhere in these docs, they are marked design direction.
+>   Do not read the target product as a claim about current runtime.
+>
+> The control-plane application may need its own repository; that is
+> [ADR 0002](docs/adr/0002-control-plane-repository-boundary.md), and no substantial
+> control-plane implementation begins until it is accepted.
+
 This repository ships no application or library code — no importable package, no service, no
 API. What it does ship: the [ecosystem manifest](manifest/ecosystem.yaml) (the pinned-commit
 lockfile and source of truth for every version and test-count number in this document), a
@@ -252,11 +271,17 @@ and passes a real cross-product smoke test.
 
 | Document | Read it for |
 |---|---|
+| **[PRODUCT_THESIS.md](PRODUCT_THESIS.md)** | The canonical product — *making agents usable* — and current state vs target (design direction) |
+| **[MARKETPLACE_ARCHITECTURE.md](MARKETPLACE_ARCHITECTURE.md)** | The marketplace and the entire business model: categories, metadata, neutral sorting, verification, fees (design direction) |
+| **[DATA_AND_COMPLIANCE_BOUNDARIES.md](DATA_AND_COMPLIANCE_BOUNDARIES.md)** | The component-level data matrix and what compliance enablement is (and is not) |
+| **[TRANSPARENCY.md](TRANSPARENCY.md)** | Plain commitments: what Connect stores, when it earns a fee, how ranking and telemetry work |
 | **[MANIFESTO.md](MANIFESTO.md)** | The engineering philosophy — what we refuse to build, and why |
 | **[GETTING_STARTED.md](GETTING_STARTED.md)** | Per-product quickstarts, standalone |
 | **[COMBINED_INSTALL.md](COMBINED_INSTALL.md)** | Two-product recipes and the full four-product install |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | How the products interact, with deployment diagrams |
 | **[docs/ORGANIZATION_MODEL.md](docs/ORGANIZATION_MODEL.md)** | Organization-aware onboarding — how one control plane scales from an individual to a company by adding structure, not switching editions (design direction) |
+| **[docs/SETUP_HUMAN_GUIDED.md](docs/SETUP_HUMAN_GUIDED.md)** | The 15-stage visual setup flow for people new to terminals, keys, and providers (design direction) |
+| **[docs/SETUP_AGENT_LED.md](docs/SETUP_AGENT_LED.md)** | Zero-trust agent-led setup — the agent proposes, humans approve, privileges are temporary (design direction) |
 | **[COMPATIBILITY.md](COMPATIBILITY.md)** | 0.1.0 version matrix, Python floors, port registry, contracts, known gaps |
 | **[CONTRIBUTING.md](CONTRIBUTING.md)** | What belongs in this repository and what does not |
 | **[manifest/ecosystem.yaml](manifest/ecosystem.yaml)** | The ecosystem source of truth / lockfile: pinned commits, tags, package and contract versions, test gate counts |
