@@ -180,3 +180,52 @@ written down rather than smoothed over.
   [TRANSPARENCY.md](TRANSPARENCY.md). Like the organizational-scale entry above, they are
   *design direction*: the marketplace and control-plane application do not ship yet, and this is
   recorded so they are built the right way from the start.
+
+---
+
+## What Connect will never become
+
+This is the definitive statement of the refusal, enumerated so no future implementation can
+reinterpret it. **Connect will never become:**
+
+- a subscription business;
+- a per-seat licensing platform;
+- an enterprise-edition product;
+- a professional-services company;
+- a managed hosting provider;
+- an inference provider;
+- a GPU cloud;
+- a centralized AI concierge;
+- a centralized recommendation engine;
+- a centralized behavioral-profiling platform;
+- a customer data custodian.
+
+## What Connect will never intentionally degrade
+
+The free path is a commitment, not a loss-leader. **Connect will never intentionally degrade:**
+
+- self-hosting;
+- customer-owned compute;
+- existing subscriptions;
+- existing provider contracts;
+- open-source providers;
+- local models;
+- free providers.
+
+A customer must be able to run a complete Connect environment for free, forever, on resources
+they already own or already pay a third party for. No capability is withheld from that path to
+make paying more attractive.
+
+## Marketplace adoption is earned, never forced
+
+Connect earns revenue only when it facilitates an optional paid marketplace transaction or
+performs transparent vendor verification. Customers may consolidate externally billed services
+into marketplace billing later — but only because it is more convenient (simpler billing,
+unified records, easier provisioning), never because Connect impaired the alternative.
+**Marketplace adoption is earned through convenience, not forced through restriction.**
+Personalization belongs to the customer's own agent, operating on customer-controlled context —
+never to a central profile held by Connect.
+
+This section is the constitution of the business model. If a future document, feature, or
+handoff proposes anything on the *never become* list, or anything that degrades an item on the
+*never degrade* list, that proposal is wrong by this manifesto, not a permitted trade-off.

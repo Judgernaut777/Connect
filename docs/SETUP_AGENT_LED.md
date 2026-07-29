@@ -90,9 +90,23 @@ departments into a larger organization — is specified in
 [ORGANIZATION_MODEL.md §Agent-led organizational setup](ORGANIZATION_MODEL.md#agent-led-organizational-setup),
 under the same must-not-silently constraints.
 
+## Planes a setup agent configures
+
+A setup agent proposes configuration that each plane then owns and enforces:
+
+- **[AgentConnect](https://github.com/Judgernaut777/AgentConnect)** (Work plane) — workspaces,
+  harnesses, budgets, and the [setup integration contract](https://github.com/Judgernaut777/AgentConnect/blob/main/docs/SETUP_INTEGRATION.md).
+- **[Workspace isolation](https://github.com/Judgernaut777/AgentConnect/blob/main/docs/WORKSPACE_ISOLATION.md)**
+  — the isolation level the agent proposes, enforced by a pluggable provider.
+- **[BrainConnect](https://github.com/Judgernaut777/BrainConnect)** (Knowledge plane) — memory
+  scopes; the agent may propose but must never silently merge memory stores.
+- **[ToolConnect](https://github.com/Judgernaut777/ToolConnect)** (Capability plane) — approved
+  and prohibited tools; the agent operates under the same fail-closed, zero-trust discipline.
+
 ## See also
 
 - [SETUP_HUMAN_GUIDED.md](SETUP_HUMAN_GUIDED.md) — the visual alternative.
 - [ORGANIZATION_MODEL.md](ORGANIZATION_MODEL.md) — org-aware setup, ownership, and adoption.
+- [../MARKETPLACE_ARCHITECTURE.md](../MARKETPLACE_ARCHITECTURE.md) — the marketplace metadata a setup agent queries.
 - [../PRODUCT_THESIS.md](../PRODUCT_THESIS.md) — the product this flow belongs to.
 - [../MANIFESTO.md](../MANIFESTO.md) — the propose-not-decide spine.
