@@ -1,7 +1,17 @@
 # ADR 0002 — Where the user-facing control-plane application lives
 
-- Status: **Proposed** (raised by the ecosystem documentation-correction pass, 2026-07-28).
-  This ADR frames the decision and its options; it is not yet ratified by the Lead.
+- Status: **Accepted** (2026-08-04).
+- Decision: **Option A — a separate control-plane repository**, named **`Connect-Control`**.
+- Rationale: The four infrastructure planes are stable at `0.1.x` (two release candidates,
+  two MVPs with named gaps), the governance slice (ToolConnect contract `1.1` enforcement at
+  the final invocation boundary) is in progress, and control-plane work now needs a home
+  that does not pollute the docs-only umbrella. The evaluation below showed that the most
+  load-bearing property of this repository — that nothing in it compiles, so its honesty is
+  enforced by review and the drift check, not a test suite — would be put at risk by
+  expanding `Connect` (Option B). A separate repository keeps each repository's job
+  singular: `Connect` stays the thin, drift-checked integration umbrella; `Connect-Control`
+  owns the application's stack, packaging, and cadence as a consumer of the manifest and the
+  four planes' contracts.
 - Context: The [product thesis](../../PRODUCT_THESIS.md) defines a target **user-facing
   control-plane application** — visual workspaces, human-guided and agent-led onboarding,
   organization configuration, marketplace discovery, budget visibility, policy configuration,
@@ -12,14 +22,14 @@
   it deliberately ships **no importable, installable, or executed product code**. The
   control-plane application is exactly such code (a desktop/web app, a marketplace module, an
   organization-management layer, a budget interface). It cannot land in `Connect` without
-  either overturning the docs-only rule or being carved into a new home.
+  either overturning the docs-only rule or being carved into a new home. This ADR chooses the
+  new home.
 
 ## The decision this ADR governs
 
 **Where does the user-facing control-plane application live — a new repository, or an expanded
-`Connect`?** Until this ADR is accepted, **no substantial control-plane application
-implementation begins in the `Connect` repository.** Documentation of the target product
-(this pass) is explicitly permitted and is not "implementation."
+`Connect`?** With this ADR accepted, that question is answered: a new repository,
+**`Connect-Control`**. The `Connect` repository remains docs-and-integration only.
 
 Related and deliberately *not* re-opened here: the four planes keep their own repositories,
 names, and release cadence ([MANIFESTO §*What we will not build*](../../MANIFESTO.md#what-we-will-not-build)).
@@ -27,22 +37,24 @@ This ADR is only about the fifth, control-plane surface.
 
 ## Options
 
-### Option A — a separate control-plane repository
+### Option A — a separate control-plane repository ✅ accepted
 
 ```text
 Connect
     ecosystem manifest, compatibility, distribution and release integration (docs-only, as today)
 
-ConnectWorkspace  (or ConnectControlPlane)
+Connect-Control
     the user-facing desktop/web control-plane application, including the marketplace module,
     organization management, and the budget interface
 ```
 
 `Connect` stays the thin, drift-checked integration umbrella it is today; the application is a
 new product repository that *consumes* the manifest and the four planes' contracts like any
-other consumer.
+other consumer. The ADR's option sketch named the repo `ConnectWorkspace` (or
+`ConnectControlPlane`); the accepted name is **`Connect-Control`**, matching the ecosystem's
+`*Connect` product naming convention.
 
-### Option B — expand the existing `Connect` repository
+### Option B — expand the existing `Connect` repository ❌ rejected
 
 ```text
 Connect
@@ -67,36 +79,39 @@ Connect
 | **Risk of repository sprawl** | One more repo to track in the manifest | None |
 | **Risk of turning Connect into a monolith** | Avoided — the umbrella stays thin | **High** — the umbrella becomes the app, the docs authority, and the release integrator at once |
 
-## Leaning, and why it is not yet the decision
+## Why Option A
 
-The evaluation leans toward **Option A**. The single most load-bearing property of the current
-`Connect` repository is that *nothing in it compiles, so its honesty is enforced by review and
-by the drift check, not by a test suite* ([CONTRIBUTING.md](../../CONTRIBUTING.md)). Putting a
-large application in the same repository puts that property at risk and couples a fast-moving
-app to a deliberately slow lockfile. Option A keeps each repository's job singular.
-
-This ADR nonetheless remains **Proposed**, not Accepted, because the choice has consequences
-the Lead should ratify explicitly — a new repository is a standing maintenance and
-release-integration cost, and the alternative (formally deferring the whole control-plane app)
-is also legitimate if the ecosystem is not ready to carry it.
+The evaluation leans toward **Option A**, and this ADR now ratifies that leaning. The single
+most load-bearing property of the current `Connect` repository is that *nothing in it
+compiles, so its honesty is enforced by review and by the drift check, not by a test suite*
+([CONTRIBUTING.md](../../CONTRIBUTING.md)). Putting a large application in the same
+repository would put that property at risk and couple a fast-moving app to a deliberately
+slow lockfile. Option A keeps each repository's job singular. The standing cost it adds — a
+new repository to maintain and to register in release integration — is accepted explicitly,
+and is paid down by registering `Connect-Control` in the
+[manifest](../../manifest/ecosystem.yaml) when it ships its first release (see Consequences).
 
 ## Marketplace placement
 
 The marketplace may initially ship as a **module of the control-plane product**, not a
 separate service or repository. Do **not** split it out solely for conceptual neatness; split
 it only when it clearly owns an independent authority and operational lifecycle. This holds
-under either option above. See [MARKETPLACE_ARCHITECTURE.md](../../MARKETPLACE_ARCHITECTURE.md).
+under the accepted option. See [MARKETPLACE_ARCHITECTURE.md](../../MARKETPLACE_ARCHITECTURE.md).
 
 ## Consequences
 
-- Until this ADR is **Accepted**, control-plane application code does not begin in `Connect`.
-  The documentation of the target product (thesis, marketplace architecture, data/compliance
-  boundaries, transparency, setup, budget model) proceeds now and is not gated by this ADR.
-- If **Option A** is accepted, a new repository is created and registered in the
-  [manifest](../../manifest/ecosystem.yaml) as a fifth tracked product; `Connect` keeps its
-  docs-only rule and [ADR 0001](0001-deploy-directory.md) stands unchanged.
-- If **Option B** is accepted, [ADR 0001](0001-deploy-directory.md) and
-  [CONTRIBUTING.md](../../CONTRIBUTING.md) are amended in the same change to permit application
-  code, and the drift-check/honesty model is re-designed for a repository that now compiles.
-- If the decision is to **defer**, this ADR records that the control-plane app is intentionally
-  not yet homed, and the target-product documentation stands as design direction until it is.
+- Control-plane application code lives in **`Connect-Control`** and does not begin in
+  `Connect`. The `Connect` repository keeps its docs-only rule; [ADR 0001](0001-deploy-directory.md)
+  and [CONTRIBUTING.md](../../CONTRIBUTING.md) stand unchanged.
+- `Connect-Control` is registered in the [manifest](../../manifest/ecosystem.yaml) as a fifth
+  tracked product when it ships its first release; until then the manifest continues to track
+  the four infrastructure planes only, and `Connect-Control` is documented as a scaffold.
+- The marketplace ships initially as a module of `Connect-Control`, per the placement note
+  above.
+- `Connect/deploy/` continues to compose the stack; the application image is added to that
+  composition when a runnable artifact exists — and not before.
+- The alternative this ADR weighed and rejected — deferring the control-plane application
+  entirely — is recorded here: the ecosystem is ready to carry a scaffolded control-plane
+  home, and the target-product documentation (thesis, marketplace architecture,
+  data/compliance boundaries, transparency, setup, budget model) now has an implementation
+  home to converge on.

@@ -13,7 +13,9 @@ Two states are labeled throughout the docs and in this index:
   yet**; documents describing them say so in their opening lines.
 
 The repository-boundary decision ([ADR 0002](adr/0002-control-plane-repository-boundary.md)) is
-**Proposed, not accepted** — no document assumes it is resolved.
+**Accepted** (2026-08-04): the user-facing control-plane application lives in a separate
+repository, [`Connect-Control`](https://github.com/Judgernaut777/Connect-Control). This
+repository remains docs-and-integration only.
 
 ---
 
@@ -73,7 +75,7 @@ The repository-boundary decision ([ADR 0002](adr/0002-control-plane-repository-b
 | ADR | Status | Decision |
 |---|---|---|
 | [adr/0001-deploy-directory.md](adr/0001-deploy-directory.md) | Accepted | Connect may carry a `deploy/` directory (config + scripts, not product code) |
-| [adr/0002-control-plane-repository-boundary.md](adr/0002-control-plane-repository-boundary.md) | **Proposed** | Where the user-facing control-plane application lives (separate repo vs expand Connect) — gates control-plane implementation |
+| [adr/0002-control-plane-repository-boundary.md](adr/0002-control-plane-repository-boundary.md) | **Accepted** | The user-facing control-plane application lives in a separate repository, `Connect-Control`; Connect stays docs-only |
 
 ## Operations
 
