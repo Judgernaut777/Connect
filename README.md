@@ -17,9 +17,11 @@ Both statements are true, and this repository keeps them apart on purpose:
 > **The target is not built yet.** The user-facing control-plane application, the marketplace,
 > the onboarding wizard, and the generalized budget engine **do not exist**. Where they are
 > described in these docs they are marked *design direction* — do not read the target product
-> as a claim about current runtime. The control-plane application may need its own repository;
-> that is [ADR 0002](docs/adr/0002-control-plane-repository-boundary.md), which remains
-> **Proposed**, and no substantial control-plane implementation begins until it is accepted.
+> as a claim about current runtime. The control-plane application has its own repository,
+> [`Connect-Control`](https://github.com/Judgernaut777/Connect-Control), per
+> [ADR 0002](docs/adr/0002-control-plane-repository-boundary.md) (**Accepted** 2026-08-04,
+> Option A). This repository stays docs-only; `Connect-Control` is currently a scaffold with
+> no runtime, and that scaffold says so.
 
 New here? The [documentation index](docs/README.md) maps every current document by topic and
 labels each *current* or *target*.

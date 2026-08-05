@@ -94,16 +94,17 @@ trust, decide their authorizations, or place their compute. It stays deliberatel
 
 **Repository note.** The *Connect repository* today owns ecosystem integration, release
 coordination, deployment composition, compatibility, manifests, and cross-repository
-documentation. The user-facing **control-plane application** described above may require a
-separate repository; that decision is made in
-[ADR 0002](docs/adr/0002-control-plane-repository-boundary.md) and no substantial
-control-plane implementation begins in this repository until that ADR is accepted.
+documentation. The user-facing **control-plane application** lives in a separate repository,
+[`Connect-Control`](https://github.com/Judgernaut777/Connect-Control): that decision is made
+in [ADR 0002](docs/adr/0002-control-plane-repository-boundary.md) (**Accepted** 2026-08-04,
+Option A), and this repository remains docs-only. `Connect-Control` is currently a scaffold
+with no runtime; it does not yet implement anything described above.
 
 ## Current state vs target
 
 | | Ships today | Target product |
 |---|---|---|
-| **Connect repo** | Manifest, deploy bundle, cross-product docs (no code) | Coordinates a visual control-plane app; app repo decided by [ADR 0002](docs/adr/0002-control-plane-repository-boundary.md) |
+| **Connect repo** | Manifest, deploy bundle, cross-product docs (no code) | Coordinates a visual control-plane app; the app lives in `Connect-Control` per [ADR 0002](docs/adr/0002-control-plane-repository-boundary.md) |
 | **Planes** | Four standalone `0.1.0` products with named limitations ([README](README.md#status-at-a-glance)) | The same four, coordinated under one control plane |
 | **Setup** | Per-product READMEs; a documented org-aware *design direction* ([docs/ORGANIZATION_MODEL.md](docs/ORGANIZATION_MODEL.md)) | Human-guided and agent-led onboarding ([docs/SETUP_HUMAN_GUIDED.md](docs/SETUP_HUMAN_GUIDED.md), [docs/SETUP_AGENT_LED.md](docs/SETUP_AGENT_LED.md)) |
 | **Marketplace** | Documented architecture only ([MARKETPLACE_ARCHITECTURE.md](MARKETPLACE_ARCHITECTURE.md)) | Neutral discovery/comparison/transactions for independent vendors |
