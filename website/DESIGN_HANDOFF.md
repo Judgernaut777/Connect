@@ -49,7 +49,9 @@ Use this as the source of truth for all copy. Real names, real taglines, real ma
 | **ToolConnect** | Tool | Tool governance: which tools exist, who may call them, what happened. A fail-closed decision point with a tamper-evident, hash-chained audit. **Not a data path.** | *"A tool that says 'I am read-only' is making a claim, not a promise."* / *"An error is a denial."* | MVP |
 
 ### The sixth repo
-**BrainConnect Control Model** — a small (4B) CPU-deployable, fine-tuned **orchestration controller** for BrainConnect. Emits strict JSON control decisions (CLASSIFY / ROUTE / ASSIGN / REVIEW / MONITOR / RECOVER / NORMALIZE). **Advisory only — deterministic code keeps all authority.** 0 policy violations on a 499-example adversarial set. *Maturity: shadow mode, explicitly not production-ready.*
+**Connect Control Model** (`connect-control-model`) — a small (4B) CPU-deployable, fine-tuned **orchestration controller** for the Work plane, owned by AgentConnect ([ADR 0010](https://github.com/Judgernaut777/AgentConnect/blob/main/docs/adr/0010-control-model-plane-ownership.md)). Emits strict JSON control decisions (CLASSIFY / ROUTE / ASSIGN / REVIEW / MONITOR / RECOVER / NORMALIZE). **Advisory only — deterministic code keeps all authority.** 0 policy violations on a 499-example adversarial set. *Maturity: shadow mode, explicitly not production-ready.*
+
+> Do **not** call this "the BrainConnect Control Model" — that was its old name and it put a routing advisor inside the plane that is forbidden to hold routing math. It never ran inside BrainConnect, and BrainConnect's "the CLI makes zero model calls" line stays exactly as written.
 
 > Signature line: *"The model advises and detects conflicts; deterministic code decides."*
 
