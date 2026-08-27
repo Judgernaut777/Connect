@@ -20,8 +20,11 @@ Both statements are true, and this repository keeps them apart on purpose:
 > as a claim about current runtime. The control-plane application has its own repository,
 > [`Connect-Control`](https://github.com/Judgernaut777/Connect-Control), per
 > [ADR 0002](docs/adr/0002-control-plane-repository-boundary.md) (**Accepted** 2026-08-04,
-> Option A). This repository stays docs-only; `Connect-Control` is currently a scaffold with
-> no runtime, and that scaffold says so.
+> Option A). This repository stays docs-only. `Connect-Control` has since grown past its
+> scaffold: as of R8 it serves four server-rendered surfaces (work-request creation/status,
+> Decision and explanation, the curated marketplace, and a linked audit trail) against
+> [`Connect-Governance`](https://github.com/Judgernaut777/Connect-Governance)'s Decision
+> Kernel. Workspaces, onboarding, and budgets still do not exist, and that repository says so.
 
 New here? The [documentation index](docs/README.md) maps every current document by topic and
 labels each *current* or *target*.
@@ -81,8 +84,11 @@ as its least-mature plane, and right now that is Capability and Compute, not Wor
 
 ## Status at a glance
 
-All four products now have a runtime and a `0.1.0` release. Two are release candidates; two
-are minimum-viable but real, with limitations named below rather than smoothed over.
+All four planes now have a runtime and a `0.1.0` release. Two are release candidates; two
+are minimum-viable but real, with limitations named below rather than smoothed over. The two
+control-plane repositories are pre-`0.1.0` and move on their own milestone cadence (R0…R8);
+they are pinned here so every repository in the ecosystem has a recorded commit, version, and
+gate, not because they are ready in the sense the planes are.
 
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 | Product | Version | Maturity | What it is | Repository |
@@ -91,6 +97,8 @@ are minimum-viable but real, with limitations named below rather than smoothed o
 | **BrainConnect** | 0.1.2rc1 (tag `v0.1.2-rc1`) | Release candidate | Human-gated trusted memory ledger | [BrainConnect](https://github.com/Judgernaut777/BrainConnect) |
 | **ComputeConnect** | 0.1.0 | MVP (single-host heterogeneity proven 2026-07-27; cross-machine open) | Local-compute provider / control plane | [ComputeConnect](https://github.com/Judgernaut777/ComputeConnect) |
 | **ToolConnect** | 0.1.0 | MVP service | Tool-governance decision point | [ToolConnect](https://github.com/Judgernaut777/ToolConnect) |
+| **Connect-Control** | 0.0.0 | R8 (four server-rendered surfaces + curated marketplace; workspaces, onboarding, and budgets do not exist) | User-facing control-plane application | [Connect-Control](https://github.com/Judgernaut777/Connect-Control) |
+| **Connect-Governance** | 0.0.1 | R8 (Decision Kernel, governed state, decision records, grants, marketplace classification) | Deterministic Decision Kernel and governed state | [Connect-Governance](https://github.com/Judgernaut777/Connect-Governance) |
 <!-- END generated:tests -->
 
 Every product is installable, runs standalone, and ships an Apache-2.0 `LICENSE` and `NOTICE`
@@ -98,9 +106,10 @@ at its repository root and inside every wheel.
 
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 Test gates, from the ecosystem manifest:
-AgentConnect **1288 passed / 3 skipped** (1291 collected), BrainConnect **956 passed / 0
-failed**, ComputeConnect **155 passed** (offline gate), ToolConnect **485 passed / 3
-skipped**.
+AgentConnect **1500 passed / 13 skipped** (1511 collected), BrainConnect **951 passed / 0
+failed**, ComputeConnect **148 passed / 2 skipped** (offline gate), ToolConnect **485 passed / 3
+skipped**, Connect-Control **11 passed / 5 skipped** (11 collected), Connect-Governance
+**316 passed**.
 
 ComputeConnect's 11 real-engine tests are excluded from that offline count — they need a live
 llama.cpp on `:8080`. They now read their expected model ids from `CC_REAL_MODEL` /
@@ -108,6 +117,12 @@ llama.cpp on `:8080`. They now read their expected model ids from `CC_REAL_MODEL
 `qwen3-30b-a3b` → `qwen3.6-35b-a3b` are fixed; last live run: 149 passed / 5 skipped).
 BrainConnect's package version is `0.1.2rc1`, matching its `v0.1.2-rc1` tag — the
 long-standing tag/package mismatch was closed on 2026-07-27.
+
+Connect-Control's 11 is a floor, not its real coverage: five of its seven test modules skip
+wholesale without the `audit` extra, whose dependencies (`connect-governance[app]`,
+`agentconnect-core`, `toolconnect`) are sibling packages not published to PyPI. Neither
+Connect-Control nor Connect-Governance has CI of its own, and neither is gated by Ecosystem CI
+— their numbers here are last-verified locally, not continuously enforced.
 <!-- END generated:tests -->
 
 <!-- BEGIN generated:contracts (source: manifest/ecosystem.yaml — do not hand-edit) -->
@@ -306,12 +321,20 @@ package versions, contract versions, and last-verified test gate counts for ever
 including this one. The tables above are derived from it and wrapped in
 `<!-- BEGIN generated:tests --> … <!-- END generated:tests -->` markers.
 **[scripts/check_manifest.py](scripts/check_manifest.py)** parses those markers and fails
-non-zero the moment a doc number drifts from the manifest — that is what makes this document
-un-driftable rather than merely aspirational. **[scripts/gen_manifest.py](scripts/gen_manifest.py)**
-regenerates the manifest itself from each sibling checkout's live git state, optionally
-(`--run-gates`) re-running each sibling's gate to refresh test counts. Release images are built
-only from the commits the manifest pins — see **[docs/RELEASE.md](docs/RELEASE.md)** for the
-full model and **[.github/workflows/](.github/workflows/)** for the CI that enforces it.
+non-zero the moment a doc number drifts from the manifest.
+**[scripts/gen_manifest.py](scripts/gen_manifest.py)** regenerates the manifest itself from
+each sibling checkout's live git state, optionally (`--run-gates`) re-running each sibling's
+gate to refresh test counts. Release images are built only from the commits the manifest
+pins — see **[docs/RELEASE.md](docs/RELEASE.md)** for the full model and
+**[.github/workflows/](.github/workflows/)** for the CI that enforces it.
+
+**What that guarantee is and is not.** The check enforces that these documents agree with the
+manifest — not that either agrees with the current state of the products. A manifest that has
+not been regenerated is stale in exactly the way the docs derived from it are stale, and the
+check passes on the pair, because they are consistent. Between 2026-07-28 and 2026-08-27 that
+is precisely what happened: the pins and gate counts sat a month behind while the drift check
+stayed green. Freshness is a property of running `gen_manifest.py --run-gates`, not of the
+check. Regenerate the manifest first; only then does a green check mean the numbers are true.
 
 ## Licensing
 

@@ -13,10 +13,12 @@ All four products released `0.1.0` on 2026-07-12. What follows is keyed on those
 <!-- BEGIN generated:tests (source: manifest/ecosystem.yaml — do not hand-edit) -->
 | Product | Version | Maturity | Requires Python | Gate |
 |---|---|---|---|---|
-| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1288 passed / 3 skipped, 1291 collected (`pytest`, offline) |
-| BrainConnect | 0.1.2rc1 (tag `v0.1.2-rc1`) | Release candidate | `>= 3.11` | 956 passed / 0 failed (`python3 tests/acceptance.py`) |
-| ComputeConnect | 0.1.0 | MVP (single-host heterogeneity proven 2026-07-27; cross-machine open) | `>= 3.11` | 155 passed (`pytest`, offline) |
+| AgentConnect | 0.1.0 | Release candidate | `>= 3.10` | 1500 passed / 13 skipped, 1511 collected (`pytest`, offline) |
+| BrainConnect | 0.1.2rc1 (tag `v0.1.2-rc1`) | Release candidate | `>= 3.11` | 951 passed / 0 failed (`python3 tests/acceptance.py`) |
+| ComputeConnect | 0.1.0 | MVP (single-host heterogeneity proven 2026-07-27; cross-machine open) | `>= 3.11` | 148 passed / 2 skipped (`pytest`, offline) |
 | ToolConnect | 0.1.0 | MVP service | `>= 3.11` | 485 passed / 3 skipped (`pytest`, offline) |
+| Connect-Control | 0.0.0 | R8 (four server-rendered surfaces + curated marketplace; workspaces, onboarding, and budgets do not exist) | `>= 3.11` | 11 passed / 5 skipped, 11 collected (`pytest`, offline) |
+| Connect-Governance | 0.0.1 | R8 (Decision Kernel, governed state, decision records, grants, marketplace classification) | `>= 3.11` | 316 passed (`pytest`, offline) |
 
 ComputeConnect's offline gate excludes 11 real-engine tests that require a live llama.cpp on
 `:8080`; they read their expected model ids from `CC_REAL_MODEL` / `CC_REAL_MODEL_B`, so the
@@ -24,6 +26,16 @@ ComputeConnect's offline gate excludes 11 real-engine tests that require a live 
 are fixed (last live run with both engines up: 154 passed / 0 skipped). BrainConnect's package version now matches
 its tag: the long-standing `0.1.0`-package / `v0.1.2-rc1`-tag mismatch recorded in
 [manifest/ecosystem.yaml](manifest/ecosystem.yaml) was closed on 2026-07-27.
+
+**Read Connect-Control's 11 with its skip count.** Five of its seven test modules skip
+wholesale without the `audit` extra, which depends on sibling packages that are not published
+to PyPI (`connect-governance[app]`, `agentconnect-core`, `toolconnect`). The marketplace,
+audit-projection, Decision-route, and work-request-route tests therefore do not run in a
+standalone checkout — the number above is a floor, not the surface's real coverage.
+Connect-Governance's 316 needs its `[app]` extra: the Decision Kernel itself depends only on
+`pydantic`, but the persistence, migration, and grant-signing tests import SQLAlchemy,
+Alembic, and `cryptography`. Neither repository has CI of its own yet, and neither is gated by
+[Ecosystem CI](.github/workflows/ecosystem-ci.yml).
 <!-- END generated:tests -->
 
 AgentConnect's nine packages now all carry the same `0.1.0`, so "AgentConnect 0.1.0" names a

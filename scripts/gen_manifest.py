@@ -99,7 +99,73 @@ PRODUCTS: dict[str, dict] = {
         "local_dir": ".",
         "gate": None,  # docs + deploy bundle; no unit test suite
     },
+    # The two control-plane repositories. They are not planes -- ADR 0002 makes
+    # Connect-Control a *consumer* of this manifest -- but they ship code, carry
+    # gates, and are released, so leaving them unpinned meant two of the six
+    # repositories had no recorded commit, version, or gate anywhere.
+    "connect-control": {
+        "repository": "Judgernaut777/Connect-Control",
+        "local_dir": "../Connect-Control",
+        "maturity": (
+            "R8 (four server-rendered surfaces + curated marketplace; "
+            "workspaces, onboarding, and budgets do not exist)"
+        ),
+        "gate": {
+            "kind": "pytest",
+            "cwd": ".",
+            "note": (
+                "Offline count only. Five of the seven test modules skip "
+                "wholesale without the `audit` extra, which needs sibling "
+                "packages that are not on PyPI (connect-governance[app], "
+                "agentconnect-core, toolconnect) -- so the marketplace, "
+                "audit-projection, decision, and work-request route tests do "
+                "not run in a standalone checkout."
+            ),
+        },
+    },
+    "connect-governance": {
+        "repository": "Judgernaut777/Connect-Governance",
+        "local_dir": "../Connect-Governance",
+        "maturity": (
+            "R8 (Decision Kernel, governed state, decision records, grants, "
+            "marketplace classification)"
+        ),
+        "gate": {
+            "kind": "pytest",
+            "cwd": ".",
+            "note": (
+                "Needs the [app] extra: the Kernel itself depends only on "
+                "pydantic, but the persistence, migration, and grant-signing "
+                "tests import SQLAlchemy, Alembic, and cryptography."
+            ),
+        },
+    },
 }
+
+# The order fields are emitted in. Entry dicts are built incrementally (and
+# partly carried over from the previous manifest), so insertion order alone
+# would append a newly-introduced key after `tests` and make the generated
+# file's shape depend on when each product was first registered.
+FIELD_ORDER = (
+    "repository",
+    "local_dir",
+    "commit",
+    "tag",
+    "commits_since_tag",
+    "package_version",
+    "maturity",
+    "note",
+    "contract_versions",
+    "tests",
+)
+
+
+def in_field_order(entry: dict) -> dict:
+    """Reorder an entry into FIELD_ORDER, keeping any unrecognized keys last."""
+    ordered = {k: entry[k] for k in FIELD_ORDER if k in entry}
+    ordered.update({k: v for k, v in entry.items() if k not in ordered})
+    return ordered
+
 
 _PYTEST_COLLECTED_RE = re.compile(r"collected (\d+) item")
 _ACCEPTANCE_RESULT_RE = re.compile(r"RESULT:\s*(\d+)\s*passed,\s*(\d+)\s*failed")
@@ -159,10 +225,18 @@ def parse_pytest_counts(output: str) -> tuple[int | None, int | None, int | None
     pytest's real "N failed, M passed, K skipped" summary. Independent
     searches cannot match zero-width and are order-independent. A missing
     keyword stays None so a real count is never silently overwritten.
+
+    The LAST occurrence of each keyword wins, not the first. pytest's
+    collection header carries a count of its own -- "collected 1511 items /
+    2 skipped" names the modules skipped at COLLECTION time, not the run's
+    total -- and taking the first match let that 2 shadow the summary line's
+    real 13, understating every product whose collection skips a module. The
+    terminal summary is always the last thing pytest prints, so reading from
+    the end is what makes this the authoritative number.
     """
     def find(keyword: str) -> int | None:
-        m = re.search(rf"(\d+) {keyword}", output)
-        return int(m.group(1)) if m else None
+        matches = re.findall(rf"(\d+) {keyword}", output)
+        return int(matches[-1]) if matches else None
 
     return find("passed"), find("failed"), find("skipped")
 
@@ -249,6 +323,23 @@ def refresh_product(
     entry["repository"] = spec["repository"]
     entry["local_dir"] = spec["local_dir"]
 
+    # A sibling that is not checked out here keeps whatever the manifest
+    # already recorded. Refreshing a subset of the ecosystem is the normal
+    # case -- not every host clones all seven repositories -- and it must
+    # degrade to "preserve", never to a crash (a missing checkout used to
+    # raise FileNotFoundError out of the gate subprocess and abandon the
+    # whole run, so one absent sibling blocked regenerating the other six).
+    if not local_dir.is_dir():
+        entry.setdefault("commit", None)
+        entry.setdefault("tag", None)
+        entry.setdefault("commits_since_tag", 0)
+        entry.setdefault("package_version", None)
+        entry.setdefault("maturity", spec.get("maturity"))
+        entry.setdefault("note", None)
+        entry.setdefault("contract_versions", {})
+        entry.setdefault("tests", {})
+        return in_field_order(entry)
+
     commit = git_commit(local_dir)
     if commit:
         entry["commit"] = commit
@@ -261,7 +352,12 @@ def refresh_product(
     if package_version is not None:
         entry["package_version"] = package_version
     entry.setdefault("package_version", None)
-    entry.setdefault("maturity", None)
+    # An untagged product (the control-plane repos ship milestones, not tags)
+    # still carries the keys, so a consumer reading the manifest as a lockfile
+    # gets an explicit null rather than a KeyError.
+    entry.setdefault("tag", None)
+    entry.setdefault("commits_since_tag", 0)
+    entry.setdefault("maturity", spec.get("maturity"))
     entry.setdefault("note", None)
     entry.setdefault("contract_versions", {})
     entry.setdefault("tests", {})
@@ -277,7 +373,7 @@ def refresh_product(
                 local_dir, gate["script"], gate.get("note")
             )
 
-    return entry
+    return in_field_order(entry)
 
 
 def build_manifest(existing: dict | None, run_gates: bool) -> dict:

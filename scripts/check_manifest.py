@@ -65,6 +65,8 @@ DISPLAY_NAMES = {
     "brainconnect": "BrainConnect",
     "computeconnect": "ComputeConnect",
     "toolconnect": "ToolConnect",
+    "connect-control": "Connect-Control",
+    "connect-governance": "Connect-Governance",
 }
 
 _MARKER_RE = re.compile(
