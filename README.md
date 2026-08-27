@@ -322,9 +322,11 @@ including this one. The tables above are derived from it and wrapped in
 `<!-- BEGIN generated:tests --> … <!-- END generated:tests -->` markers.
 **[scripts/check_manifest.py](scripts/check_manifest.py)** parses those markers and fails
 non-zero the moment a doc number drifts from the manifest.
-**[scripts/gen_manifest.py](scripts/gen_manifest.py)**
-regenerates the manifest itself from each sibling checkout's live git state, optionally
-(`--run-gates`) re-running each sibling's gate to refresh test counts.
+**[scripts/gen_manifest.py](scripts/gen_manifest.py)** regenerates the manifest itself from
+each sibling checkout's live git state, optionally (`--run-gates`) re-running each sibling's
+gate to refresh test counts. Release images are built only from the commits the manifest
+pins — see **[docs/RELEASE.md](docs/RELEASE.md)** for the full model and
+**[.github/workflows/](.github/workflows/)** for the CI that enforces it.
 
 **What that guarantee is and is not.** The check enforces that these documents agree with the
 manifest — not that either agrees with the current state of the products. A manifest that has
@@ -332,9 +334,7 @@ not been regenerated is stale in exactly the way the docs derived from it are st
 check passes on the pair, because they are consistent. Between 2026-07-28 and 2026-08-27 that
 is precisely what happened: the pins and gate counts sat a month behind while the drift check
 stayed green. Freshness is a property of running `gen_manifest.py --run-gates`, not of the
-check. Regenerate the manifest first; only then does a green check mean the numbers are true. Release images are built
-only from the commits the manifest pins — see **[docs/RELEASE.md](docs/RELEASE.md)** for the
-full model and **[.github/workflows/](.github/workflows/)** for the CI that enforces it.
+check. Regenerate the manifest first; only then does a green check mean the numbers are true.
 
 ## Licensing
 
