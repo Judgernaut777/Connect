@@ -8,13 +8,17 @@ name: Ecosystem CI
 # drifted from the manifest. A stale doc table fails this workflow exactly
 # like a broken sibling test would.
 #
-# NOTE: this workflow was authored and YAML-validated (python3 -c "import
-# yaml; yaml.safe_load(...)") in the environment that wrote it, but has not
-# actually been executed by GitHub Actions. It requires the sibling
+# NOTE: first executed by GitHub Actions on 2026-08-27 (run 33032102206, on
+# the PR that regenerated the manifest), all five jobs green. Before that it
+# had only been authored and YAML-validated locally. It requires the sibling
 # repositories (AgentConnect, BrainConnect, ComputeConnect, ToolConnect) to
 # be public and clonable by the token this workflow runs with -- if any of
 # them go private, this workflow needs a PAT with cross-repo read access
 # configured as a secret instead of the default GITHUB_TOKEN.
+#
+# It gates the four planes only. Connect-Control and Connect-Governance are
+# pinned in the manifest but have no job here and no CI of their own, so
+# their recorded gate counts are last-verified locally, not enforced.
 
 on:
   push:
