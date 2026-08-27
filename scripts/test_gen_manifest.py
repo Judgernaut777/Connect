@@ -40,6 +40,94 @@ class ParsePytestCountsTest(unittest.TestCase):
     def test_no_summary_stays_none(self) -> None:
         self.assertEqual(gm.parse_pytest_counts("collected 0 items\n"), (None, None, None))
 
+    def test_collection_header_does_not_shadow_the_summary(self) -> None:
+        """pytest's collection header carries its own `N skipped`.
+
+        "collected 1511 items / 2 skipped" counts modules skipped at
+        COLLECTION time. Reading the first match anywhere in the output took
+        that 2 as the run's total and silently understated the real 13 --
+        which check_manifest.py then enforced into README as the correct
+        number.
+        """
+        out = (
+            "plugins: anyio-4.14.2\n"
+            "collected 1511 items / 2 skipped\n\n"
+            "tests/test_a.py ....s...  [ 50%]\n"
+            "======== 1500 passed, 13 skipped, 2 warnings in 57.20s ========\n"
+        )
+        self.assertEqual(gm.parse_pytest_counts(out), (1500, None, 13))
+
+    def test_deselected_header_does_not_shadow_the_summary(self) -> None:
+        out = (
+            "collected 200 items / 3 deselected / 197 selected\n"
+            "==== 190 passed, 7 skipped, 3 deselected in 2s ====\n"
+        )
+        self.assertEqual(gm.parse_pytest_counts(out), (190, None, 7))
+
+
+class FieldOrderTest(unittest.TestCase):
+    """The generated file's shape must not depend on registration history.
+
+    Entries are built incrementally and partly carried over from the previous
+    manifest, so a key introduced later (`tag` on the untagged control-plane
+    repos) was appended after `tests` and gave those products a different
+    field order from every other product.
+    """
+
+    def test_a_late_added_key_is_emitted_in_canonical_position(self) -> None:
+        entry = {"repository": "r", "tests": {"passed": 1}, "tag": None, "commit": "c"}
+        self.assertEqual(
+            list(gm.in_field_order(entry)),
+            ["repository", "commit", "tag", "tests"],
+        )
+
+    def test_unrecognized_keys_are_kept_last_not_dropped(self) -> None:
+        entry = {"tests": {}, "repository": "r", "future_field": 1}
+        ordered = gm.in_field_order(entry)
+        self.assertEqual(list(ordered), ["repository", "tests", "future_field"])
+        self.assertEqual(ordered["future_field"], 1)
+
+
+class MissingSiblingCheckoutTest(unittest.TestCase):
+    """A sibling that is not cloned here must preserve, never crash.
+
+    Refreshing a subset of the ecosystem is the normal case -- not every host
+    clones all seven repositories. The gate subprocess used to raise
+    FileNotFoundError on the absent directory and abandon the whole run, so
+    one missing sibling blocked regenerating the other six.
+    """
+
+    def test_missing_checkout_preserves_the_existing_entry(self) -> None:
+        existing = {
+            "commit": "e3ff00d69fc2702e2aa2ec27022e093ffc67bb92",
+            "tag": "v0.1.0",
+            "commits_since_tag": 11,
+            "package_version": "0.1.0",
+            "maturity": "MVP service",
+            "tests": {"runner": "pytest (offline)", "passed": 485, "failed": 0},
+        }
+        spec = {
+            "repository": "Judgernaut777/ToolConnect",
+            "local_dir": "../definitely-not-checked-out",
+            "gate": {"kind": "pytest", "cwd": "."},
+        }
+        entry = gm.refresh_product("toolconnect", spec, existing, run_gates=True)
+        self.assertEqual(entry["commit"], existing["commit"])
+        self.assertEqual(entry["tests"]["passed"], 485)
+        self.assertEqual(entry["repository"], "Judgernaut777/ToolConnect")
+
+    def test_missing_checkout_with_no_history_is_still_well_formed(self) -> None:
+        spec = {
+            "repository": "Judgernaut777/Nowhere",
+            "local_dir": "../definitely-not-checked-out",
+            "maturity": "seeded from the registry",
+            "gate": {"kind": "pytest", "cwd": "."},
+        }
+        entry = gm.refresh_product("nowhere", spec, {}, run_gates=True)
+        self.assertIsNone(entry["commit"])
+        self.assertEqual(entry["maturity"], "seeded from the registry")
+        self.assertEqual(entry["tests"], {})
+
 
 class GitTagOffsetFallbackTest(unittest.TestCase):
     def _git(self, repo: Path, *args: str) -> str:
