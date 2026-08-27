@@ -8,9 +8,14 @@ name: Ecosystem CI
 # drifted from the manifest. A stale doc table fails this workflow exactly
 # like a broken sibling test would.
 #
-# NOTE: first executed by GitHub Actions on 2026-08-27 (run 33032102206, on
-# the PR that regenerated the manifest), all five jobs green. Before that it
-# had only been authored and YAML-validated locally. It requires the sibling
+# NOTE: this has been running on every push to main since the commit that
+# added it (2026-07-16, run #1 -- which failed). Its original note claimed it
+# "has not actually been executed by GitHub Actions", which that very push
+# falsified; a later note claiming 2026-08-27 was the FIRST execution was also
+# wrong. Main has been green on every run since 2026-07-28. Check the Actions
+# tab rather than trusting a hand-written claim in this header.
+#
+# It requires the sibling
 # repositories (AgentConnect, BrainConnect, ComputeConnect, ToolConnect) to
 # be public and clonable by the token this workflow runs with -- if any of
 # them go private, this workflow needs a PAT with cross-repo read access
